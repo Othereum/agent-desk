@@ -218,16 +218,54 @@ def load_projects(root: Path) -> list[Project]:
     return result
 
 
+def git_dir(top: Path) -> Path | None:
+    """The git directory of a checkout: <top>/.git, or where a .git file points
+    (linked worktree, submodule). Reads the file, no git call."""
+    dot_git = top / ".git"
+    if dot_git.is_dir():
+        return dot_git
+    try:
+        line = dot_git.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if not line.startswith("gitdir:"):
+        return None
+    gitdir = Path(line[len("gitdir:"):].strip())
+    return gitdir if gitdir.is_absolute() else top / gitdir
+
+
+def main_worktree(top: Path) -> Path:
+    """The main checkout of a linked worktree (whose git dir is <main>/.git/worktrees/<name>);
+    `top` itself otherwise."""
+    gitdir = git_dir(top)
+    if not gitdir or gitdir.parent.name != "worktrees":  # main checkout, or e.g. a submodule
+        return top
+    return gitdir.parent.parent.parent
+
+
+def head_branch(top: Path) -> str | None:
+    """Current branch read from HEAD without running git; a short SHA when detached."""
+    gitdir = git_dir(top)
+    try:
+        head = (gitdir / "HEAD").read_text(encoding="utf-8").strip() if gitdir else ""
+    except OSError:
+        return None
+    if head.startswith("ref: "):
+        return head[5:].removeprefix("refs/heads/")
+    return head[:12] or None
+
+
 def match_project(root: Path, info: RepoInfo) -> Project | None:
     if not info.toplevel:
         return None
     remotes = {normalize_remote(r) for r in info.remotes}
-    top = normalize_path(info.toplevel)
+    # a linked worktree also matches by its main checkout's path
+    tops = {normalize_path(info.toplevel), normalize_path(main_worktree(info.toplevel))}
     for p in load_projects(root):
         if remotes & {normalize_remote(r) for r in p.config.get("remotes", [])}:
             return p
     for p in load_projects(root):
-        if top in {normalize_path(x) for x in p.config.get("paths", [])}:
+        if tops & {normalize_path(x) for x in p.config.get("paths", [])}:
             return p
     return None
 
@@ -969,7 +1007,7 @@ def cmd_project_init(args) -> None:
 
     text = (f'key = "{args.key}"\n'
             f"remotes = {toml_list(remotes)}\n"
-            f"paths = {toml_list([str(info.toplevel).replace(chr(92), '/')])}\n"
+            f"paths = {toml_list([str(main_worktree(info.toplevel)).replace(chr(92), '/')])}\n"
             f'id_template = "{args.id_template}"\n'
             f"shared_branches = {toml_list(shared)}\n"
             f'lang = "{args.lang}"\n')
@@ -1449,6 +1487,43 @@ def post_tool_use_context(payload: dict) -> str | None:
     return "\n".join(lines)
 
 
+HOOK_EVENTS = ("session-start", "post-tool-use", "user-prompt-submit")
+
+
+def current_location(payload: dict) -> list | None:
+    """[repository toplevel, branch] of the hook's cwd, without running git."""
+    top = find_toplevel(Path(payload.get("cwd") or os.getcwd()))
+    return [normalize_path(top), head_branch(top)] if top else None
+
+
+def location_change_context(payload: dict, tool_switch: bool) -> str | None:
+    """Task context for a new location, when the repository or branch differs from the one
+    last announced to the main agent. SessionStart does not fire again on a mid-session
+    switch: tool_switch is EnterWorktree/ExitWorktree (PostToolUse, cwd already moved),
+    otherwise a user prompt (catches a checkout done outside the session)."""
+    sid = payload.get("session_id")
+    session = load_session(sid)
+    loc = current_location(payload)
+    if payload.get("agent_id"):
+        # a subagent switching worktrees: tell that subagent, keep the main agent's record
+        prev = None
+    else:
+        prev = session.get("location")
+        if loc == prev or (prev is None and not tool_switch):
+            if prev is None:
+                session["location"] = loc  # first prompt of a session that predates this record
+                save_session(sid, session)
+            return None
+        session["location"] = loc
+        save_session(sid, session)
+    where = lambda l: f"{Path(l[0]).name} · {l[1] or '(detached)'}" if l else "저장소 밖"
+    change = f"{where(prev)} → {where(loc)}" if prev else where(loc)
+    lines = [f"[agent-desk] 작업 위치가 바뀌었다 ({change}). 이전에 주입된 작업 기록은 더 이상 현재 작업이 아니다."]
+    context = session_start_context(payload)
+    lines.append(context if context else "이 위치에는 등록된 프로젝트의 작업이 없다.")
+    return "\n".join(lines)
+
+
 def cmd_hook(event: str) -> None:
     try:
         raw = sys.stdin.read()
@@ -1463,6 +1538,14 @@ def cmd_hook(event: str) -> None:
             elif payload.get("source") == "startup":
                 prune_sessions()
             context, event = session_start_context(payload), "SessionStart"
+            if not payload.get("agent_id"):
+                session = load_session(sid)
+                session["location"] = current_location(payload)
+                save_session(sid, session)
+        elif event == "user-prompt-submit":
+            context, event = location_change_context(payload, tool_switch=False), "UserPromptSubmit"
+        elif payload.get("tool_name") in ("EnterWorktree", "ExitWorktree"):
+            context, event = location_change_context(payload, tool_switch=True), "PostToolUse"
         else:
             context, event = post_tool_use_context(payload), "PostToolUse"
         if context:
@@ -1481,7 +1564,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # hooks run on every tool use: skip building the argparse tree
     argv = sys.argv[1:] if argv is None else argv
-    if len(argv) == 2 and argv[0] == "hook" and argv[1] in ("session-start", "post-tool-use"):
+    if len(argv) == 2 and argv[0] == "hook" and argv[1] in HOOK_EVENTS:
         cmd_hook(argv[1])
         return 0
 
@@ -1573,7 +1656,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--min-commits", type=int, default=3, help="확인 이후 이 수 이상의 커밋이 paths를 바꾸면 낡은 것으로 판단")
 
     p = sub.add_parser("hook", help="Claude Code hook 진입점")
-    p.add_argument("event", choices=("session-start", "post-tool-use"))
+    p.add_argument("event", choices=HOOK_EVENTS)
 
     args = ap.parse_args(argv)
     handlers = {
