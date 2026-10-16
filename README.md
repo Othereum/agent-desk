@@ -8,13 +8,26 @@
 - 이미 기각한 대안을 에이전트가 다시 꺼내지 않습니다.
 - 한 번 밟은 함정은 그 코드를 다시 열 때 자동으로 알려줍니다.
 
-## 설치
+## 빠른 시작
+
+### 설치
 
 Python 3.11 이상과 git이 필요합니다.
 
 ```
 claude plugin marketplace add Othereum/agent-desk
 claude plugin install agent-desk@agent-desk
+```
+
+### 사용법
+
+저장소에서 Claude Code를 열고 아래 순서로 씁니다.
+
+```
+/agent-desk:desk-init     저장소 등록 (한 번)
+/agent-desk:desk-new      작업 시작
+                          … 평소처럼 일하기 (기록은 에이전트가 제안)
+/agent-desk:desk-close    작업 종료, knowledge 추출
 ```
 
 ## 핵심 개념
@@ -99,17 +112,6 @@ _함정 · 원인 · 방법_`"]
 ```
 
 설계 문서는 그 작업이 진행된 시점의 판단을, 저장소 문서는 코드와 함께 고쳐지는 현재 상태를 담습니다. 어디에 둘지는 에이전트가 기준에 따라 제안하고 사용자가 승인합니다.
-
-## 사용법
-
-저장소에서 Claude Code를 열고 아래 순서로 씁니다.
-
-```
-/agent-desk:desk-init     저장소 등록 (한 번)
-/agent-desk:desk-new      작업 시작
-                          … 평소처럼 일하기 (기록은 에이전트가 제안)
-/agent-desk:desk-close    작업 종료, knowledge 추출
-```
 
 ## 데이터 구조
 
