@@ -1364,7 +1364,12 @@ def post_tool_use_context(payload: dict) -> str | None:
         save_session(sid, session)
         return None
     rel = repo_relative(str(path), top)
-    shown = set(session.get("shown", []))
+    # subagent tool calls share the session_id but have their own context: track per agent
+    agent = payload.get("agent_id") or "main"
+    shown_by_agent = session.get("shown")
+    if not isinstance(shown_by_agent, dict):  # pre-0.2.3 format: list for the main agent
+        shown_by_agent = {"main": shown_by_agent or []}
+    shown = set(shown_by_agent.get(agent, []))
     matched = [e for e in entries_for_path(load_entries(root, project), rel)
                if e.status != "superseded" and e.id not in shown]
     if not matched:
@@ -1388,7 +1393,8 @@ def post_tool_use_context(payload: dict) -> str | None:
         lines.append(f"- 외 {len(rest)}건: `kn search --path {rel}`")
     lines.append(f"항목 파일: {kn_dir(root, project).as_posix()}/<ID>-*.md. "
                  "작업에 영향을 주는 항목은 본문을 읽고 반영할 것 (agent-desk:kn).")
-    session["shown"] = sorted(shown | {e.id for e in picked})
+    shown_by_agent[agent] = sorted(shown | {e.id for e in picked})
+    session["shown"] = shown_by_agent
     save_session(sid, session)
     return "\n".join(lines)
 
