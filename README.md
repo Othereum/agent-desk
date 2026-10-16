@@ -67,6 +67,7 @@ Claude Code 세션 안에서:
 └─ projects/<KEY>/
     ├─ project.toml                   # 프로젝트 설정
     ├─ index.md                       # 자동 생성
+    ├─ focus.txt                      # 포커스 작업 ID (없을 수 있음)
     ├─ tasks/<id>/state.md            # 현재 상태 (덮어씀, 60줄 이내)
     ├─ tasks/<id>/decisions.md        # 결정 (항목 추가, 대체 시 표시)
     ├─ tasks/<id>/log.md              # 히스토리 (덧붙이기만)
@@ -119,6 +120,15 @@ lang = "ko"
 - ID는 생성 후 바뀌지 않습니다. 브랜치가 바뀌면 `link`로 추가 연결합니다.
 - 브랜치 하나에는 진행 중(active/paused)인 작업 하나만 연결할 수 있습니다.
 
+### 세션의 작업과 포커스
+
+세션이 다루는 작업은 **현재 브랜치에 연결된 작업 → 프로젝트의 포커스 작업** 순서로 정해집니다.
+
+- 브랜치를 따서 개발하는 프로젝트는 브랜치에 연결된 작업이 그대로 쓰입니다.
+- `main`에서만 개발하는 프로젝트는 브랜치 없는 작업(`new --no-branch`)과 포커스로 운영합니다. 공용 브랜치에서 만든 브랜치 없는 작업은 자동으로 포커스가 되고, 종료하면 해제됩니다. 다른 작업으로 넘어갈 때는 `focus <id>`를 씁니다.
+- 브랜치가 실제로 하는 일을 더 정확히 보여 주므로 브랜치가 우선합니다. 포커스는 브랜치가 아무것도 알려 주지 않을 때의 대안입니다.
+- 포커스는 프로젝트당 하나라서, 같은 저장소에서 여러 세션이 서로 다른 브랜치 없는 작업을 동시에 진행하는 경우는 지원하지 않습니다.
+
 ### 상위 작업과 연관 작업
 
 - **상위 작업(`parent`)**: 여러 브랜치로 나뉘는 큰 흐름을 묶습니다. 큰 흐름은 브랜치 없는 작업으로 만들고, 각 브랜치 작업을 `--parent`로 그 아래에 둡니다. 계층은 한 단계만 허용합니다. 하위 작업 세션에는 상위 작업의 목표와 결정 제목이 함께 주입되므로, 브랜치가 달라도 흐름 전체의 결정을 이어받습니다.
@@ -130,7 +140,8 @@ lang = "ko"
 python bin/desk.py [--project KEY] [--cwd DIR] <command>
   where | list [--all] | index
   project-init KEY [--id-template T] [--shared a,b] [--lang ko]
-  new --title T [--branch B | --no-branch --slug S] [--parent ID] [--related a,b]
+  new --title T [--branch B | --no-branch --slug S] [--parent ID] [--related a,b] [--no-focus]
+  focus [ID | --clear]
   link ID [--branch B]
   relate ID [--parent P | --no-parent] [--add a,b] [--remove a,b]
   status ID active|paused

@@ -19,6 +19,7 @@ python <desk.py> new --title "제목" --no-branch --slug survey-x
 python <desk.py> new --title "제목" --parent <id> [--related a,b]   # 상위·연관 작업 지정
 python <desk.py> link <id> [--branch B]               # 작업에 브랜치 추가
 python <desk.py> relate <id> [--parent P | --no-parent] [--add a,b] [--remove a,b]
+python <desk.py> focus [<id> | --clear]                # 포커스 작업 조회·지정·해제
 python <desk.py> status <id> active|paused
 python <desk.py> close <id> done|abandoned [--note "..."]
 python <desk.py> reopen <id>
@@ -47,6 +48,18 @@ ID 생성, 브랜치 중복 검사, 상태 전환, 아카이브 이동은 반드
 - 사용자가 지시했을 때, 또는 이 세션에서 **새 브랜치를 만들었을 때만** 만든다. 브랜치를 만든 경우에는 만들기 전에 사용자에게 한 줄로 확인한다.
 - 그 외에는 만들지 않는다. 잠깐의 질문, 조사, 일회성 수정마다 작업을 만들면 기록이 소음이 된다.
 - 프로젝트가 등록되지 않았으면 `agent-desk:desk-init` 절차를 먼저 안내한다.
+
+## 세션의 작업과 포커스
+
+세션이 다루는 작업은 다음 순서로 정해지고, SessionStart가 그 작업을 주입한다.
+1. 현재 브랜치에 연결된 작업
+2. 없으면 프로젝트의 **포커스 작업** (`· 포커스`로 표시)
+3. 둘 다 없으면 작업 없음. 진행 중인 브랜치 없는 작업이 있으면 목록이 함께 표시된다.
+
+- `main`에서만 개발하는 프로젝트처럼 공용 브랜치에서 일할 때는 브랜치 없는 작업과 포커스로 운영한다. 공용 브랜치에서 `new --no-branch`로 만든 작업은 자동으로 포커스가 되고, 그 작업을 `close`하면 포커스도 해제된다.
+- 다른 브랜치 없는 작업으로 넘어갈 때는 사용자에게 확인하고 `focus <id>`로 바꾼다.
+- 작업이 연결되지 않은 기능 브랜치에서 포커스 작업이 표시되면, 이 브랜치의 일과 관계없을 수 있다. 관계없으면 사용자에게 확인하고 새 작업을 만들거나 `link`로 연결한다.
+- 포커스 작업이 현재 브랜치 작업과 별개라는 안내가 나오면, 포커스가 낡았는지 사용자에게 확인한다.
 
 ## 상위 작업과 연관 작업
 

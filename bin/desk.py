@@ -397,6 +397,51 @@ def resolve_parent(project: Project, parent_id: str, child_id: str | None = None
     return parent
 
 
+# ---------------------------------------------------------------- focus
+# The project's current task, independent of branches. A session uses the task
+# linked to the current branch first; the focused task only when there is none
+# (typically on a shared branch such as main in main-only projects).
+
+FOCUS_FILE = "focus.txt"
+
+
+def get_focus_id(project: Project) -> str | None:
+    try:
+        value = read_text(project.dir / FOCUS_FILE).strip()
+    except OSError:
+        return None
+    return value or None
+
+
+def get_focus_task(project: Project) -> Task | None:
+    focus_id = get_focus_id(project)
+    if not focus_id:
+        return None
+    try:
+        task = get_task(project, focus_id)
+    except DeskError:
+        return None
+    return task if not task.archived and task.status in OPEN_STATUSES else None
+
+
+def set_focus(project: Project, task_id: str | None) -> None:
+    path = project.dir / FOCUS_FILE
+    if task_id:
+        write_text(path, task_id + "\n")
+    elif path.exists():
+        path.unlink()
+
+
+def resolve_session_task(project: Project, branch: str | None) -> tuple[Task | None, str]:
+    """The task a session works on: ("branch" | "focus" | "") source."""
+    if branch:
+        task = find_task_by_branch(project, branch)
+        if task:
+            return task, "branch"
+    task = get_focus_task(project)
+    return (task, "focus") if task else (None, "")
+
+
 def section_line(task: Task, heading: str) -> str:
     m = re.search(rf"^## {re.escape(heading)}[ \t]*\n(.*?)(?=^## |\Z)", read_text(task.state_path), re.M | re.S)
     for line in (m.group(1).splitlines() if m else []):
@@ -415,8 +460,11 @@ def write_index(project: Project) -> Path:
     closed = sorted((t for t in tasks if t.archived),
                     key=lambda t: t.meta.get("updated", ""), reverse=True)
 
+    focus_id = (get_focus_id(project) or "").casefold()
+
     def row(t: Task) -> str:
-        cells = [t.id, t.meta.get("title", ""), t.status, ", ".join(t.branches),
+        status = t.status + (" · 포커스" if not t.archived and t.id.casefold() == focus_id else "")
+        cells = [t.id, t.meta.get("title", ""), status, ", ".join(t.branches),
                  t.meta.get("parent", "") or "", t.meta.get("updated", "")]
         return "| " + " | ".join(c.replace("|", "\\|") for c in cells) + " |"
 
@@ -857,6 +905,10 @@ def cmd_doctor(args) -> None:
         issues.append({"level": "info", "kind": "no-repo",
                        "message": "프로젝트 저장소를 찾지 못해 git 기반 점검을 건너뜀"})
     doctor_tasks(project, top, issues)
+    focus_id = get_focus_id(project)
+    if focus_id and not get_focus_task(project):
+        issues.append({"level": "info", "kind": "focus-stale", "id": focus_id,
+                       "message": "포커스가 종료되었거나 없는 작업을 가리킴. `focus --clear` 또는 다른 작업으로 지정"})
     doctor_knowledge(root, project, top, args.min_commits, issues)
     doctor_knowledge(root, None, None, args.min_commits, issues)
 
@@ -888,7 +940,7 @@ def cmd_where(args) -> None:
     root = desk_root()
     info = repo_info(Path(args.cwd))
     project = match_project(root, info) if (root / "projects").is_dir() else None
-    task = find_task_by_branch(project, info.branch) if project and info.branch else None
+    task, source = resolve_session_task(project, info.branch) if project else (None, "")
     out({
         "root": str(root),
         "repo": str(info.toplevel) if info.toplevel else None,
@@ -896,7 +948,9 @@ def cmd_where(args) -> None:
         "project": project.key if project else None,
         "project_dir": str(project.dir) if project else None,
         "task": task.id if task else None,
+        "task_source": source or None,
         "task_dir": str(task.dir) if task else None,
+        "focus": get_focus_id(project) if project else None,
     })
 
 
@@ -951,9 +1005,29 @@ def cmd_new(args) -> None:
     }
     for name in TASK_FILES:
         write_text(tdir / name, render_template(project.lang, name, values))
+    # a branchless task created on a shared branch (or detached) becomes the focus
+    focused = (branch is None and not args.no_focus
+               and (not info.branch or project.is_shared(info.branch)))
+    if focused:
+        set_focus(project, task_id)
     write_index(project)
     out({"task": task_id, "dir": str(tdir), "branch": branch,
-         "parent": parent.id if parent else None, "related": related})
+         "parent": parent.id if parent else None, "related": related, "focused": focused})
+
+
+def cmd_focus(args) -> None:
+    root = ensure_root()
+    project, _ = current_project(root, Path(args.cwd), args.project)
+    if args.clear:
+        set_focus(project, None)
+    elif args.id:
+        task = get_task(project, args.id)
+        if task.archived or task.status not in OPEN_STATUSES:
+            raise DeskError(f"진행 중인 작업만 포커스할 수 있습니다: {task.id} ({task.status})")
+        set_focus(project, task.id)
+    focus = get_focus_task(project)
+    out({"project": project.key, "focus": focus.id if focus else None,
+         "title": focus.meta.get("title", "") if focus else None})
 
 
 def cmd_relate(args) -> None:
@@ -1041,9 +1115,12 @@ def cmd_close(args) -> None:
         raise DeskError(f"아카이브에 같은 ID가 이미 있습니다: {dest}")
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(task.dir), str(dest))
+    unfocused = (get_focus_id(project) or "").casefold() == task.id.casefold()
+    if unfocused:
+        set_focus(project, None)
     write_index(project)
     open_children = [t.id for t in children_of(project, task.id, open_only=True)]
-    out({"task": task.id, "status": args.result, "dir": str(dest),
+    out({"task": task.id, "status": args.result, "dir": str(dest), "unfocused": unfocused,
          **({"warning": f"진행 중인 하위 작업이 남아 있습니다: {', '.join(open_children)}"} if open_children else {})})
 
 
@@ -1109,16 +1186,33 @@ def session_start_context(payload: dict) -> str | None:
     if not project:
         return None
     cli = f'python "{Path(__file__).resolve().as_posix()}"'
-    head = f"[agent-desk] 프로젝트 {project.key} · 브랜치 {info.branch or '(detached)'}"
+    branch = info.branch
+    head = f"[agent-desk] 프로젝트 {project.key} · 브랜치 {branch or '(detached)'}"
     kn_line = knowledge_line(root, project, cli)
-    task = find_task_by_branch(project, info.branch) if info.branch else None
+    task, source = resolve_session_task(project, branch)
     if not task:
-        return "\n".join([f"{head} · 연결된 작업 없음.", f"CLI: {cli}"] + ([kn_line] if kn_line else []) +
-                         ["작업 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다."])
+        lines = [f"{head} · 연결된 작업 없음.", f"CLI: {cli}"] + ([kn_line] if kn_line else [])
+        branchless = [t for t in load_tasks(project) if t.status in OPEN_STATUSES and not t.branches]
+        if branchless:
+            listed = ", ".join(f"{t.id}({t.meta.get('title', '')})" for t in branchless[:5])
+            more = f" 외 {len(branchless) - 5}건" if len(branchless) > 5 else ""
+            lines.append(f"진행 중인 브랜치 없는 작업: {listed}{more}. 이어서 할 작업이면 사용자에게 확인하고 "
+                         f"`{cli} focus <id>` 로 포커스를 지정할 것.")
+        return "\n".join(lines + ["작업 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다."])
     design_doc = task.meta.get("design_doc")
-    parts = [f"{head} · 작업 {task.id} ({task.status})",
+    label = "" if source == "branch" else " · 포커스"
+    parts = [f"{head} · 작업 {task.id} ({task.status}{label})",
              f"작업 폴더: {task.dir.as_posix()}"] + ([f"설계 문서: {design_doc}"] if design_doc else []) + [
-             f"CLI: {cli}"] + ([kn_line] if kn_line else []) + [
+             f"CLI: {cli}"] + ([kn_line] if kn_line else [])
+    if source == "focus" and branch and not project.is_shared(branch):
+        parts.append(f"이 브랜치({branch})에는 연결된 작업이 없어 포커스 작업을 표시한다. 이 브랜치의 일과 관계없을 수 있으니 "
+                     "관련이 없으면 사용자에게 확인하고 새 작업을 만들거나 `link` 로 연결할 것.")
+    if source == "branch":
+        focus = get_focus_task(project)
+        if focus and focus.id != task.id and focus.id != (task.meta.get("parent") or ""):
+            parts.append(f"포커스 작업은 {focus.id}({focus.meta.get('title', '')})로, 이 브랜치 작업과 별개다. "
+                         "포커스가 낡았다면 사용자에게 확인하고 갱신할 것.")
+    parts += [
              "",
              "--- state.md ---",
              read_text(task.state_path).rstrip()]
@@ -1330,6 +1424,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--no-branch", action="store_true")
     p.add_argument("--parent", help="상위 작업 ID (한 단계만 허용)")
     p.add_argument("--related", help="연관 작업 ID (쉼표 구분)")
+    p.add_argument("--no-focus", action="store_true", help="브랜치 없는 작업을 만들어도 포커스로 지정하지 않음")
+
+    p = sub.add_parser("focus", help="포커스 작업 조회·지정·해제 (브랜치에 연결된 작업이 없을 때 쓰는 작업)")
+    p.add_argument("id", nargs="?")
+    p.add_argument("--clear", action="store_true")
 
     p = sub.add_parser("relate", help="작업의 상위·연관 관계 변경")
     p.add_argument("id")
@@ -1397,7 +1496,7 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     handlers = {
         "where": cmd_where, "project-init": cmd_project_init, "new": cmd_new,
-        "link": cmd_link, "relate": cmd_relate, "status": cmd_status, "close": cmd_close, "reopen": cmd_reopen,
+        "link": cmd_link, "relate": cmd_relate, "focus": cmd_focus, "status": cmd_status, "close": cmd_close, "reopen": cmd_reopen,
         "list": cmd_list, "index": cmd_index, "hook": cmd_hook, "doctor": cmd_doctor,
     }
     kn_handlers = {

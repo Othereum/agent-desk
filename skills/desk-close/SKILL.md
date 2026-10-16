@@ -23,5 +23,6 @@ CLI 경로, 기록 규칙, 문서 위치 기준은 `agent-desk:desk` 스킬을, 
    - 옮긴 결정에는 decisions.md의 해당 항목 제목 끝에 `→ K0012`처럼 knowledge ID를 덧붙인다.
 7. 종료한다: `python <desk.py> close <id> done|abandoned --note "한 줄 요약"`
    - 하위 작업을 종료하면 상위 작업의 state.md "현재 상태"에 결과를 한 줄 반영한다.
+   - 포커스 작업을 종료하면 포커스가 해제된다(`unfocused: true`). 이어서 할 브랜치 없는 작업이 있으면 `focus <id>`로 지정할지 사용자에게 묻는다.
    - 상위 작업을 종료할 때 진행 중인 하위 작업이 남아 있으면 출력에 `warning`이 나온다. 하위 작업을 먼저 정리할지 사용자에게 확인한다.
 8. 아카이브 경로, 새로 기록한 knowledge ID, 남은 후속 조치(문서 반영 등)를 짧게 알린다. 다시 열 때는 `reopen <id>`를 쓰면 된다는 점도 함께 알린다.
