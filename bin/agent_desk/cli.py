@@ -16,7 +16,7 @@ from .core import (
 from .frontmatter import format_scalar, format_value
 from .gitinfo import repo_info
 from .model import (
-    append_log, build_id, check_branch_free, children_of, current_project, find_task_by_branch, get_focus_id,
+    append_log, build_id, check_branch_free, children_of, current_project, get_focus_id,
     get_focus_task, get_project, get_task, load_projects, load_tasks, main_worktree, match_project,
     projects_dir, render_template, resolve_parent, resolve_session_task, sanitize, set_focus, set_meta,
     task_list_field,
@@ -271,8 +271,8 @@ def cmd_kn_add(args) -> None:
     entries = load_entries(root, project)
     entry_id = next_entry_id(entries, "K" if project else "G")
     sources = split_csv(args.sources)
-    if not sources and project and info.branch:
-        task = find_task_by_branch(project, info.branch)
+    if not sources and project:
+        task, _ = resolve_session_task(project, info.branch)
         if task:
             sources = [task.id]
     body = args.body or "<!-- 요약: 15줄 이내. 사실 하나만 담고, 근거가 되는 코드 위치(경로:줄)를 포함한다. -->"
@@ -294,7 +294,7 @@ def cmd_kn_list(args) -> None:
     project, _ = try_project(root, args)
     entries = all_entries(root, project)
     if not args.all:
-        entries = [e for e in entries if e.status != "superseded"]
+        entries = [e for e in entries if e.live]
     out([e.as_dict() for e in entries])
 
 
@@ -303,7 +303,7 @@ def cmd_kn_search(args) -> None:
     project, info = try_project(root, args)
     entries = all_entries(root, project)
     if not args.all:
-        entries = [e for e in entries if e.status != "superseded"]
+        entries = [e for e in entries if e.live]
     terms = [t.casefold() for t in args.terms]
     if args.path:
         matched = entries_for_path(entries, repo_relative(args.path, info.toplevel))
@@ -330,12 +330,28 @@ def cmd_kn_supersede(args) -> None:
     out({"id": old.id, "status": "superseded", "superseded_by": new.id})
 
 
+def check_live(e) -> None:
+    if e.status == "superseded":
+        raise DeskError(f"대체된 항목입니다: {e.id} → {e.meta.get('superseded_by')}")
+    if e.status == "retired":
+        raise DeskError(f"폐기된 항목입니다: {e.id} ({e.meta.get('retired_reason') or '사유 없음'})")
+
+
+def cmd_kn_retire(args) -> None:
+    root = ensure_root()
+    project, _ = try_project(root, args)
+    e = find_entry(root, project, args.id)
+    check_live(e)
+    update_entry(e, {"status": "retired", "retired_reason": args.reason})
+    write_kn_index(root, project if e.scope != "global" else None)
+    out({"id": e.id, "status": "retired"})
+
+
 def cmd_kn_verify(args) -> None:
     root = ensure_root()
     project, _ = try_project(root, args)
     e = find_entry(root, project, args.id)
-    if e.status == "superseded":
-        raise DeskError(f"대체된 항목입니다: {e.id} → {e.meta.get('superseded_by')}")
+    check_live(e)
     verified = now_minute()
     update_entry(e, {"status": "valid", "verified": verified, "stale_reason": ""})
     write_kn_index(root, project if e.scope != "global" else None)
@@ -346,6 +362,7 @@ def cmd_kn_stale(args) -> None:
     root = ensure_root()
     project, _ = try_project(root, args)
     e = find_entry(root, project, args.id)
+    check_live(e)
     update_entry(e, {"status": "stale", "stale_reason": args.reason or "수동 표시"})
     write_kn_index(root, project if e.scope != "global" else None)
     out({"id": e.id, "status": "stale"})
@@ -454,21 +471,24 @@ def run(argv: list[str]) -> int:
     p.add_argument("--kind", required=True, choices=KN_KINDS)
     p.add_argument("--paths", help="관련 경로 glob (저장소 기준, 쉼표 구분)")
     p.add_argument("--tags", help="태그 (쉼표 구분)")
-    p.add_argument("--sources", help="출처 작업 ID (기본: 현재 브랜치의 작업)")
+    p.add_argument("--sources", help="출처 작업 ID (기본: 현재 브랜치의 작업, 없으면 포커스 작업)")
     p.add_argument("--location", default="inline", help="inline | repo:<경로> | claude-docs:<url>")
     p.add_argument("--slug", help="파일명용 영문 슬러그")
     p.add_argument("--body", help="본문 (생략 시 안내 주석만 넣고 이후 직접 편집)")
     p.add_argument("--global", dest="is_global", action="store_true", help="전역 항목으로 추가")
     p = kn.add_parser("list", help="항목 목록 (프로젝트 + 전역)")
-    p.add_argument("--all", action="store_true", help="대체된 항목 포함")
+    p.add_argument("--all", action="store_true", help="대체·폐기된 항목 포함")
     p = kn.add_parser("search", help="항목 검색")
     p.add_argument("terms", nargs="*")
     p.add_argument("--path", help="이 파일에 해당하는 항목 (paths glob 매칭)")
-    p.add_argument("--all", action="store_true", help="대체된 항목 포함")
+    p.add_argument("--all", action="store_true", help="대체·폐기된 항목 포함")
     p.add_argument("--limit", type=int, default=10)
     p = kn.add_parser("supersede", help="항목을 다른 항목으로 대체")
     p.add_argument("id")
     p.add_argument("--by", required=True)
+    p = kn.add_parser("retire", help="대체할 항목 없이 폐기 (파일은 남김)")
+    p.add_argument("id")
+    p.add_argument("--reason", required=True)
     p = kn.add_parser("verify", help="코드와 대조해 확인했음을 기록")
     p.add_argument("id")
     p = kn.add_parser("stale", help="재확인 필요로 표시")
@@ -490,7 +510,7 @@ def run(argv: list[str]) -> int:
     }
     kn_handlers = {
         "add": cmd_kn_add, "list": cmd_kn_list, "search": cmd_kn_search,
-        "supersede": cmd_kn_supersede, "verify": cmd_kn_verify, "stale": cmd_kn_stale,
+        "supersede": cmd_kn_supersede, "retire": cmd_kn_retire, "verify": cmd_kn_verify, "stale": cmd_kn_stale,
     }
     try:
         if args.cmd == "kn":

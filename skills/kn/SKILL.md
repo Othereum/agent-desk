@@ -46,7 +46,7 @@ CLI 경로는 `agent-desk:desk` 스킬의 CLI 항목을 따른다.
 adesk kn add --kind pitfall --title "한 문장 제목" \
   --paths "src/auth/**,src/**/SessionCache*.cs" --tags "auth,session" --slug session-cache-reload
 ```
-생성된 `file`을 Edit로 열어 본문을 쓴다. 출처 작업(`sources`)은 현재 브랜치의 작업으로 자동 기록된다.
+생성된 `file`을 Edit로 열어 본문을 쓴다. 출처 작업(`sources`)은 현재 세션의 작업(브랜치에 연결된 작업, 없으면 포커스 작업)으로 자동 기록된다.
 
 본문 규칙:
 - **사실 하나만** 담는다. 둘 이상이면 항목을 나눈다.
@@ -57,8 +57,9 @@ adesk kn add --kind pitfall --title "한 문장 제목" \
 
 ## 고치기
 
-- 내용이 틀렸거나 바뀌었으면 **기존 항목을 지우지 않는다.** 새 항목을 추가하고 `kn supersede <old> --by <new>`로 대체한다.
+- 내용이 틀렸거나 바뀌었으면 **기존 항목을 지우지 않는다.** 바른 사실이 있으면 새 항목을 추가하고 `kn supersede <old> --by <new>`로 대체한다.
 - 코드가 바뀌어 다시 확인해야 하는데 지금 확인할 수 없으면 `kn stale <id> --reason "<이유>"`로 표시한다.
+- 대체할 사실 없이 틀렸거나 더 이상 의미가 없으면 `kn retire <id> --reason "<이유>"`로 폐기한다. 파일은 남고 주입·검색에서 빠진다(`list --all`, `search --all`로 볼 수 있다). 파일을 직접 지우지 않는다(ID가 재사용되어 기존 참조가 다른 항목을 가리킬 수 있다).
 - 오타나 표현만 고치는 경우는 파일을 직접 Edit한다.
 
 ## 낡은 항목 점검 (doctor)

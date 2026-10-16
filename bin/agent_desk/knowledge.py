@@ -17,7 +17,8 @@ from .model import Project, get_project, match_project
 KN_KINDS = ("decision", "pitfall", "finding", "howto")
 
 
-KN_STATUSES = ("valid", "stale", "superseded")
+KN_STATUSES = ("valid", "stale", "superseded", "retired")
+KN_INACTIVE = ("superseded", "retired")  # kept for history, out of injection and search
 
 
 class Entry:
@@ -28,6 +29,10 @@ class Entry:
     @property
     def status(self) -> str:
         return self.meta.get("status", "valid")
+
+    @property
+    def live(self) -> bool:
+        return self.status not in KN_INACTIVE
 
     def items(self, key: str) -> list[str]:
         v = self.meta.get(key, [])
@@ -46,6 +51,7 @@ class Entry:
                 "title": self.meta.get("title", ""), "status": self.status,
                 "superseded_by": self.meta.get("superseded_by") or None,
                 "stale_reason": self.meta.get("stale_reason") or None,
+                "retired_reason": self.meta.get("retired_reason") or None,
                 "tags": self.items("tags"), "paths": self.items("paths"),
                 "location": self.meta.get("location", "inline"),
                 "verified": self.meta.get("verified", ""), "summary": self.summary(),

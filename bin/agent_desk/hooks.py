@@ -114,8 +114,8 @@ def parent_context(project: Project, task: Task) -> list[str]:
 
 
 def knowledge_line(root: Path, project: Project) -> str | None:
-    pn = sum(1 for e in load_entries(root, project) if e.status != "superseded")
-    gn = sum(1 for e in load_entries(root, None) if e.status != "superseded")
+    pn = sum(1 for e in load_entries(root, project) if e.live)
+    gn = sum(1 for e in load_entries(root, None) if e.live)
     if not pn and not gn:
         return None
     line = (f"knowledge: 프로젝트 {pn}건 · 전역 {gn}건. 시스템을 조사하거나 수정하기 전에 "
@@ -249,7 +249,7 @@ def kn_hook_index(root: Path, project: Project) -> list[dict]:
                 "summary": e.summary(),
                 "location": e.meta.get("location", "inline"),
                 "stale_reason": e.meta.get("stale_reason") or ""}
-               for e in load_entries(root, project) if e.status != "superseded" and e.items("paths")]
+               for e in load_entries(root, project) if e.live and e.items("paths")]
     try:  # write then rename, so a concurrent session never reads a half-written file
         cache.parent.mkdir(parents=True, exist_ok=True)
         tmp = cache.with_name(f"{cache.name}.{os.getpid()}.tmp")

@@ -134,7 +134,7 @@ def doctor_knowledge(root: Path, project: Project | None, top: Path | None,
         seen[e.id] = e.path.name
     if not project or not top:
         return
-    live = [e for e in entries if e.status != "superseded"]
+    live = [e for e in entries if e.live]
     with_paths = [e for e in live if e.items("paths")]
     tracked, history = [], []
     if with_paths:
