@@ -10,8 +10,8 @@ import sys
 from pathlib import Path
 
 from .core import (
-    DEFAULT_ID_TEMPLATE, DEFAULT_SHARED_BRANCHES, DeskError, OPEN_STATUSES, TASK_FILES, desk_root,
-    ensure_root, now_minute, today, write_text,
+    DEFAULT_ID_TEMPLATE, DEFAULT_SHARED_BRANCHES, DeskError, OPEN_STATUSES, PYTHON_ALIAS_MESSAGE, TASK_FILES,
+    desk_root, ensure_root, now_minute, python_alias, today, write_text,
 )
 from .frontmatter import format_scalar, format_value
 from .gitinfo import repo_info
@@ -190,7 +190,7 @@ def cmd_status(args) -> None:
     project, _ = current_project(root, Path(args.cwd), args.project)
     task = get_task(project, args.id)
     if task.archived:
-        raise DeskError("아카이브된 작업입니다. desk.py reopen 을 사용하세요")
+        raise DeskError("아카이브된 작업입니다. adesk reopen 을 사용하세요")
     if args.status == "active":
         for b in task.branches:
             check_branch_free(project, b, task.id)
@@ -361,6 +361,10 @@ def cmd_doctor(args) -> None:
     if not top:
         issues.append({"level": "info", "kind": "no-repo",
                        "message": "프로젝트 저장소를 찾지 못해 git 기반 점검을 건너뜀"})
+    alias = python_alias()
+    if alias:
+        issues.append({"level": "warn", "kind": "python-alias", "target": alias,
+                       "message": PYTHON_ALIAS_MESSAGE.format(path=alias)})
     doctor_tasks(project, top, issues)
     focus_id = get_focus_id(project)
     if focus_id and not get_focus_task(project):
@@ -389,7 +393,7 @@ def cmd_doctor(args) -> None:
 
 def run(argv: list[str]) -> int:
     import argparse
-    ap = argparse.ArgumentParser(prog="desk.py", description="agent-desk CLI")
+    ap = argparse.ArgumentParser(prog="adesk", description="agent-desk CLI")
     ap.add_argument("--cwd", default=os.getcwd(), help="기준 디렉터리 (기본: 현재 디렉터리)")
     ap.add_argument("--project", help="프로젝트 key (기본: 현재 저장소로 자동 판별)")
     sub = ap.add_subparsers(dest="cmd", required=True)

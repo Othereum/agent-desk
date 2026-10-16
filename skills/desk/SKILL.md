@@ -9,23 +9,23 @@ description: agent-desk 작업 기록(state·decisions·log)을 읽고 갱신하
 
 ## CLI
 
-세션 컨텍스트의 `[agent-desk]` 블록에 적힌 `CLI` 줄의 명령을 사용한다(블록 안의 `desk ...`는 이 명령으로 바꿔 실행한다). 없으면 이 스킬의 base directory 기준 `../../bin/desk.py`를 `python`으로 실행한다.
+Bash 도구에서 `adesk`로 실행한다(Claude Code가 플러그인 `bin/`을 Bash 도구의 PATH에 넣는다). PowerShell 등 다른 셸이거나 `adesk`를 찾지 못하면 `adesk` 대신 이 스킬의 base directory 기준 `../../bin/desk.py`를 `python`으로 실행한다.
 
 ```
-python <desk.py> where                                # 현재 저장소·브랜치의 프로젝트와 작업
-python <desk.py> list [--all]                         # 작업 목록 (--all: 아카이브 포함)
-python <desk.py> new --title "제목"                    # 현재 브랜치로 작업 생성
-python <desk.py> new --title "제목" --no-branch --slug survey-x
-python <desk.py> new --title "제목" --parent <id> [--related a,b]   # 상위·연관 작업 지정
-python <desk.py> link <id> [--branch B]               # 작업에 브랜치 추가
-python <desk.py> relate <id> [--parent P | --no-parent] [--add a,b] [--remove a,b]
-python <desk.py> focus [<id> | --clear]                # 포커스 작업 조회·지정·해제
-python <desk.py> status <id> active|paused
-python <desk.py> close <id> done|abandoned [--note "..."]
-python <desk.py> reopen <id>
-python <desk.py> index                                # 작업·knowledge index.md 재생성
-python <desk.py> kn search|list|add|supersede|verify|stale ...   # knowledge (agent-desk:kn 스킬)
-python <desk.py> doctor [--apply]                     # 낡은 knowledge·충돌 사본·방치된 작업 점검 (agent-desk:kn 스킬)
+adesk where                             # 현재 저장소·브랜치의 프로젝트와 작업
+adesk list [--all]                      # 작업 목록 (--all: 아카이브 포함)
+adesk new --title "제목"                  # 현재 브랜치로 작업 생성
+adesk new --title "제목" --no-branch --slug survey-x
+adesk new --title "제목" --parent <id> [--related a,b]   # 상위·연관 작업 지정
+adesk link <id> [--branch B]            # 작업에 브랜치 추가
+adesk relate <id> [--parent P | --no-parent] [--add a,b] [--remove a,b]
+adesk focus [<id> | --clear]            # 포커스 작업 조회·지정·해제
+adesk status <id> active|paused
+adesk close <id> done|abandoned [--note "..."]
+adesk reopen <id>
+adesk index                             # 작업·knowledge index.md 재생성
+adesk kn search|list|add|supersede|verify|stale ...   # knowledge (agent-desk:kn 스킬)
+adesk doctor [--apply]                  # 낡은 knowledge·충돌 사본·방치된 작업 점검 (agent-desk:kn 스킬)
 ```
 `--project KEY`와 `--cwd DIR`은 하위 명령 **앞에** 둔다. 출력은 JSON이다.
 

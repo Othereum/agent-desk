@@ -7,7 +7,7 @@ description: agent-desk 작업을 종료(done/abandoned)하고 아카이브한�
 
 CLI 경로, 기록 규칙, 문서 위치 기준은 `agent-desk:desk` 스킬을, knowledge 규칙은 `agent-desk:kn` 스킬을 따른다.
 
-1. 대상 작업을 확인한다. 지정이 없으면 `python <desk.py> where`의 `task`를 쓴다.
+1. 대상 작업을 확인한다. 지정이 없으면 `adesk where`의 `task`를 쓴다.
 2. 종료 결과를 정한다: 완료면 `done`, 중단이면 `abandoned`.
 3. **마무리 기록**: state.md의 "현재 상태"에 최종 결과를 한두 줄로 적고, log.md에 종료 요약을 남긴다.
 4. **저장소 문서 점검**: 이 작업이 문서화된 시스템의 동작을 바꿨거나 새 문서 기준을 만족하는 시스템을 만들었는데, 저장소 문서에 반영되지 않았는지 확인한다.
@@ -21,7 +21,7 @@ CLI 경로, 기록 규칙, 문서 위치 기준은 `agent-desk:desk` 스킬을, 
    - 저장소 문서에 이미 반영된 내용은 knowledge로 중복 기록하지 않는다.
    - 후보를 사용자에게 **한 번에 목록으로** 제안하고, 승인한 항목만 기록한다.
    - 옮긴 결정에는 decisions.md의 해당 항목 제목 끝에 `→ K0012`처럼 knowledge ID를 덧붙인다.
-7. 종료한다: `python <desk.py> close <id> done|abandoned --note "한 줄 요약"`
+7. 종료한다: `adesk close <id> done|abandoned --note "한 줄 요약"`
    - 하위 작업을 종료하면 상위 작업의 state.md "현재 상태"에 결과를 한 줄 반영한다.
    - 포커스 작업을 종료하면 포커스가 해제된다(`unfocused: true`). 이어서 할 브랜치 없는 작업이 있으면 `focus <id>`로 지정할지 사용자에게 묻는다.
    - 상위 작업을 종료할 때 진행 중인 하위 작업이 남아 있으면 출력에 `warning`이 나온다. 하위 작업을 먼저 정리할지 사용자에게 확인한다.

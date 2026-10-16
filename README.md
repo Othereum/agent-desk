@@ -14,6 +14,8 @@
 
 Python 3.11 이상과 git이 필요합니다.
 
+Windows에서 `python`이 앱 실행 별칭(`...\WindowsApps\python.exe`)으로 잡히면 hook마다 약 0.1초가 더 듭니다. 설정 > 앱 > 고급 앱 설정 > 앱 실행 별칭에서 python.exe·python3.exe를 끄세요. 이 경우 세션 시작과 `doctor`가 알려 줍니다.
+
 ```
 claude plugin marketplace add Othereum/agent-desk
 claude plugin install agent-desk@agent-desk
@@ -160,7 +162,7 @@ _함정 · 원인 · 방법_`"]
 - [`desk`](skills/desk/SKILL.md): 작업 생성 기준, 기록 규칙, 포커스와 상위 작업, 문서 위치 기준
 - [`kn`](skills/kn/SKILL.md): knowledge 형식, 기록·수정 규칙, doctor
 - [`desk-new`](skills/desk-new/SKILL.md) · [`desk-close`](skills/desk-close/SKILL.md) · [`desk-init`](skills/desk-init/SKILL.md): 절차
-- CLI: `python bin/desk.py --help`
+- CLI: `python bin/desk.py --help`. Claude Code의 Bash 도구에서는 플러그인 `bin/`이 PATH에 들어가므로 `adesk --help`로 실행할 수 있습니다.
 - 테스트: `python -m unittest discover -s tests`
 
 ## 라이선스

@@ -49,6 +49,23 @@ def ensure_root() -> Path:
     return root
 
 
+def python_alias() -> str | None:
+    """The `python` that hooks.json runs, when it is a Windows app execution alias.
+
+    An alias (...\\Microsoft\\WindowsApps\\python.exe) adds about 0.1s to every start,
+    which every hook call pays."""
+    if os.name != "nt":
+        return None
+    import shutil
+    found = shutil.which("python")
+    return found if found and "\\microsoft\\windowsapps\\" in found.casefold() else None
+
+
+PYTHON_ALIAS_MESSAGE = ("python이 Windows 앱 실행 별칭({path})으로 실행되어 agent-desk hook마다 약 0.1초가 더 듭니다. "
+                        "설정 > 앱 > 고급 앱 설정 > 앱 실행 별칭에서 python.exe·python3.exe를 끄세요. "
+                        "Microsoft Store판 Python만 설치되어 있다면 python.org 설치본이나 Python install manager를 쓰세요.")
+
+
 def today() -> str:
     return dt.date.today().isoformat()
 

@@ -11,7 +11,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-from .core import DeskError, OPEN_STATUSES, PLUGIN_ROOT, desk_root, read_text
+from .core import DeskError, OPEN_STATUSES, PYTHON_ALIAS_MESSAGE, desk_root, python_alias, read_text
 from .frontmatter import parse_frontmatter
 from .gitinfo import RepoInfo, git, normalize_path, repo_info
 from .model import (
@@ -39,7 +39,7 @@ def session_start_context(payload: dict) -> str | None:
     project = match_project(root, info)
     if not project:
         return None
-    cli = f'python "{(PLUGIN_ROOT / "bin" / "desk.py").as_posix()}"'
+    cli = "CLI: Bash 도구에서 `adesk ...`로 실행한다."
     branch = info.branch
     head = f"[agent-desk] 프로젝트 {project.key} · 브랜치 {branch or '(detached)'}"
     kn_line = knowledge_line(root, project)
@@ -47,19 +47,19 @@ def session_start_context(payload: dict) -> str | None:
     if not task:
         # an unreadable task may be this branch's: say so before anything suggests a new task
         lines = ([f"{head} · 연결된 작업 없음."] + broken_task_lines(project) +
-                 [f"CLI(아래에서 `desk`로 표기): {cli}"] + ([kn_line] if kn_line else []))
+                 [cli] + ([kn_line] if kn_line else []))
         branchless = [t for t in load_tasks(project) if t.status in OPEN_STATUSES and not t.branches]
         if branchless:
             listed = ", ".join(f"{t.id}({t.meta.get('title', '')})" for t in branchless[:5])
             more = f" 외 {len(branchless) - 5}건" if len(branchless) > 5 else ""
             lines.append(f"진행 중인 브랜치 없는 작업: {listed}{more}. 이어서 할 작업이면 사용자에게 확인하고 "
-                         "`desk focus <id>` 로 포커스를 지정할 것.")
+                         "`adesk focus <id>` 로 포커스를 지정할 것.")
         return "\n".join(lines + ["작업 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다."])
     design_doc = task.meta.get("design_doc")
     label = "" if source == "branch" else " · 포커스"
     parts = [f"{head} · 작업 {task.id} ({task.status}{label})",
              f"작업 폴더: {task.dir.as_posix()}"] + ([f"설계 문서: {design_doc}"] if design_doc else []) + [
-             f"CLI(아래에서 `desk`로 표기): {cli}"] + ([kn_line] if kn_line else [])
+             cli] + ([kn_line] if kn_line else [])
     if source == "focus" and branch and not project.is_shared(branch):
         parts.append(f"이 브랜치({branch})에는 연결된 작업이 없어 포커스 작업을 표시한다. 이 브랜치의 일과 관계없을 수 있으니 "
                      "관련이 없으면 사용자에게 확인하고 새 작업을 만들거나 `link` 로 연결할 것.")
@@ -77,7 +77,7 @@ def session_start_context(payload: dict) -> str | None:
     parts += parent_context(project, task)
     related = task_list_field(task, "related")
     if related:
-        parts += ["", f"연관 작업: {', '.join(related)} (필요할 때 `desk list --all` 로 위치를 찾아 읽을 것)"]
+        parts += ["", f"연관 작업: {', '.join(related)} (필요할 때 `adesk list --all` 로 위치를 찾아 읽을 것)"]
     strays = stray_files(task)
     if strays:
         parts += ["", f"경고: 작업 폴더에 예상하지 않은 파일이 있습니다(동기화 충돌 사본일 수 있음): {', '.join(strays)}. 사용자에게 알리고 병합 여부를 확인할 것."]
@@ -119,13 +119,13 @@ def knowledge_line(root: Path, project: Project) -> str | None:
     if not pn and not gn:
         return None
     line = (f"knowledge: 프로젝트 {pn}건 · 전역 {gn}건. 시스템을 조사하거나 수정하기 전에 "
-            "`desk kn search <검색어>` 또는 `desk kn search --path <파일>` 로 관련 항목을 확인할 것.")
+            "`adesk kn search <검색어>` 또는 `adesk kn search --path <파일>` 로 관련 항목을 확인할 것.")
     if pn:
         marker = project.dir / DOCTOR_MARKER
         age = (dt.datetime.now().timestamp() - marker.stat().st_mtime) / 86400 if marker.exists() else None
         if age is None or age >= DOCTOR_REMIND_DAYS:
             since = f"{int(age)}일째" if age is not None else "한 번도"
-            line += (f"\ndoctor를 {since} 실행하지 않았다. 사용자에게 `desk doctor` 실행을 한 줄로 제안할 것"
+            line += (f"\ndoctor를 {since} 실행하지 않았다. 사용자에게 `adesk doctor` 실행을 한 줄로 제안할 것"
                      "(낡은 knowledge 점검).")
     return line
 
@@ -392,8 +392,14 @@ def cmd_hook(event: str) -> None:
             context, event = location_change_context(payload, tool_switch=True), "PostToolUse"
         else:
             context, event = post_tool_use_context(payload), "PostToolUse"
+        output = {}
         if context:
-            print(json.dumps({"hookSpecificOutput": {
-                "hookEventName": event, "additionalContext": context}}))
+            output["hookSpecificOutput"] = {"hookEventName": event, "additionalContext": context}
+        if event == "SessionStart" and payload.get("source") in ("startup", None) and not payload.get("agent_id"):
+            alias = python_alias()
+            if alias:  # shown to the user, who is the one to change the setting
+                output["systemMessage"] = "[agent-desk] " + PYTHON_ALIAS_MESSAGE.format(path=alias)
+        if output:
+            print(json.dumps(output))
     except Exception as e:  # a hook must never break the session
         print(f"agent-desk hook error: {e}", file=sys.stderr)

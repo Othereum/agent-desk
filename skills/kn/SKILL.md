@@ -30,9 +30,9 @@ CLI 경로는 `agent-desk:desk` 스킬의 CLI 항목을 따른다.
 
 - 시스템을 조사하거나 수정하기 **전에** 검색한다.
   ```
-  python <desk.py> kn search <검색어...>          # 제목·태그·경로·본문 검색 (전역 포함)
-  python <desk.py> kn search --path <파일 경로>   # 그 파일에 해당하는 항목
-  python <desk.py> kn list                        # 전체 목록
+  adesk kn search <검색어...>              # 제목·태그·경로·본문 검색 (전역 포함)
+  adesk kn search --path <파일 경로>        # 그 파일에 해당하는 항목
+  adesk kn list                         # 전체 목록
   ```
 - **자동 주입**: 파일을 Read/Edit/Write하면 그 경로에 해당하는 프로젝트 항목이 `[agent-desk knowledge]` 블록으로 자동 주입된다(세션당 항목별 한 번, 컨텍스트 압축 뒤에는 다시 주입). 주입된 항목 중 지금 작업에 영향을 주는 것은 수정하기 전에 본문을 읽고 반영한다. 전역 항목은 경로가 없으므로 자동 주입되지 않는다. 필요하면 검색한다.
 - 결과의 `summary`로 관련성을 판단하고, 필요한 항목만 `file`을 Read로 읽는다. `location`이 `repo:`나 `claude-docs:`이면 그 위치에 본문이 있다.
@@ -43,7 +43,7 @@ CLI 경로는 `agent-desk:desk` 스킬의 CLI 항목을 따른다.
 **발견한 즉시 제안한다.** 함정, 원인, 설계 결정을 확정한 순간 사용자에게 한 줄로 기록을 제안한다. 종료 시점까지 미루면 맥락이 압축되어 세부 내용을 잃는다. 사용자가 승인한 항목만 기록한다.
 
 ```
-python <desk.py> kn add --kind pitfall --title "한 문장 제목" \
+adesk kn add --kind pitfall --title "한 문장 제목" \
   --paths "src/auth/**,src/**/SessionCache*.cs" --tags "auth,session" --slug session-cache-reload
 ```
 생성된 `file`을 Edit로 열어 본문을 쓴다. 출처 작업(`sources`)은 현재 브랜치의 작업으로 자동 기록된다.
@@ -64,8 +64,8 @@ python <desk.py> kn add --kind pitfall --title "한 문장 제목" \
 ## 낡은 항목 점검 (doctor)
 
 ```
-python <desk.py> doctor            # 점검만 한다
-python <desk.py> doctor --apply    # 낡은 것으로 판정된 valid 항목을 stale로 표시한다
+adesk doctor                            # 점검만 한다
+adesk doctor --apply                    # 낡은 것으로 판정된 valid 항목을 stale로 표시한다
 ```
 - 판정 기준: 확인(`verified`) 이후 `paths`를 바꾼 커밋이 3건 이상(`--min-commits`), `paths`에 해당하는 추적 파일이 없음, 본문이나 `location`이 참조하는 경로가 없음. 커밋은 현재 HEAD의 이력을 author 날짜로 판단하므로 rebase의 영향을 받지 않는다.
 - 같이 점검하는 것: 동기화 충돌 사본, frontmatter 오류, ID 중복, 로컬에서 사라진 브랜치에 연결된 작업, 30일 넘게 갱신되지 않은 작업.

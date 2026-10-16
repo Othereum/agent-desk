@@ -116,7 +116,7 @@ def current_project(root: Path, cwd: Path, key: str | None) -> tuple[Project, Re
         return get_project(root, key), info
     project = match_project(root, info)
     if not project:
-        raise DeskError("현재 저장소가 등록된 프로젝트와 일치하지 않습니다. desk.py project-init 으로 등록하세요")
+        raise DeskError("현재 저장소가 등록된 프로젝트와 일치하지 않습니다. adesk project-init 으로 등록하세요")
     return project, info
 
 
