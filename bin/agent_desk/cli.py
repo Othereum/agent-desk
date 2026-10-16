@@ -23,8 +23,8 @@ from .model import (
 )
 from .index import write_index
 from .knowledge import (
-    KN_KINDS, all_entries, entries_for_path, find_entry, kn_dir, load_entries, next_entry_id, repo_relative,
-    search_score, split_csv, try_project, update_entry, write_kn_index,
+    KN_KINDS, all_entries, entries_for_path, entry_references, find_entry, kn_dir, load_entries, next_entry_id,
+    repo_relative, search_score, split_csv, tombstone_entry, try_project, update_entry, write_kn_index,
 )
 from .doctor import DOCTOR_MARKER, doctor_knowledge, doctor_tasks, project_repo
 from . import HOOK_EVENTS
@@ -335,6 +335,8 @@ def check_live(e) -> None:
         raise DeskError(f"대체된 항목입니다: {e.id} → {e.meta.get('superseded_by')}")
     if e.status == "retired":
         raise DeskError(f"폐기된 항목입니다: {e.id} ({e.meta.get('retired_reason') or '사유 없음'})")
+    if e.status == "deleted":
+        raise DeskError(f"삭제된 항목입니다: {e.id}")
 
 
 def cmd_kn_retire(args) -> None:
@@ -345,6 +347,30 @@ def cmd_kn_retire(args) -> None:
     update_entry(e, {"status": "retired", "retired_reason": args.reason})
     write_kn_index(root, project if e.scope != "global" else None)
     out({"id": e.id, "status": "retired"})
+
+
+KN_DELETE_NOTE = "데이터 폴더를 동기화하거나 백업하고 있다면 그 버전 기록에는 이전 내용이 남아 있을 수 있다"
+
+
+def cmd_kn_delete(args) -> None:
+    root = ensure_root()
+    project, _ = try_project(root, args)
+    e = find_entry(root, project, args.id)
+    if args.purge:
+        # the highest id is reused once its file is gone: only safe while nothing refers to it
+        refs = entry_references(root, e)
+        if refs:
+            listed = ", ".join(refs[:10]) + (f" 외 {len(refs) - 10}곳" if len(refs) > 10 else "")
+            hint = "" if e.status == "deleted" else " 또는 --purge 없이 삭제(내용만 지우고 ID는 남김)"
+            raise DeskError(f"{e.id} 를 참조하는 기록이 있어 파일을 지울 수 없습니다: {listed}. 참조를 정리하세요{hint}")
+        e.path.unlink()
+        status, path = "purged", None
+    else:
+        if e.status == "deleted":
+            raise DeskError(f"이미 삭제된 항목입니다: {e.id}. 파일까지 지우려면 --purge")
+        status, path = "deleted", tombstone_entry(e).as_posix()
+    write_kn_index(root, project if e.scope != "global" else None)
+    out({"id": e.id, "status": status, "file": path, "note": KN_DELETE_NOTE})
 
 
 def cmd_kn_verify(args) -> None:
@@ -477,11 +503,11 @@ def run(argv: list[str]) -> int:
     p.add_argument("--body", help="본문 (생략 시 안내 주석만 넣고 이후 직접 편집)")
     p.add_argument("--global", dest="is_global", action="store_true", help="전역 항목으로 추가")
     p = kn.add_parser("list", help="항목 목록 (프로젝트 + 전역)")
-    p.add_argument("--all", action="store_true", help="대체·폐기된 항목 포함")
+    p.add_argument("--all", action="store_true", help="대체·폐기·삭제된 항목 포함")
     p = kn.add_parser("search", help="항목 검색")
     p.add_argument("terms", nargs="*")
     p.add_argument("--path", help="이 파일에 해당하는 항목 (paths glob 매칭)")
-    p.add_argument("--all", action="store_true", help="대체·폐기된 항목 포함")
+    p.add_argument("--all", action="store_true", help="대체·폐기·삭제된 항목 포함")
     p.add_argument("--limit", type=int, default=10)
     p = kn.add_parser("supersede", help="항목을 다른 항목으로 대체")
     p.add_argument("id")
@@ -489,6 +515,9 @@ def run(argv: list[str]) -> int:
     p = kn.add_parser("retire", help="대체할 항목 없이 폐기 (파일은 남김)")
     p.add_argument("id")
     p.add_argument("--reason", required=True)
+    p = kn.add_parser("delete", help="내용을 지우고 ID만 남김 (--purge: 참조가 없으면 파일까지 삭제)")
+    p.add_argument("id")
+    p.add_argument("--purge", action="store_true", help="파일을 지운다. 이 ID를 참조하는 기록이 있으면 거부")
     p = kn.add_parser("verify", help="코드와 대조해 확인했음을 기록")
     p.add_argument("id")
     p = kn.add_parser("stale", help="재확인 필요로 표시")
@@ -510,7 +539,8 @@ def run(argv: list[str]) -> int:
     }
     kn_handlers = {
         "add": cmd_kn_add, "list": cmd_kn_list, "search": cmd_kn_search,
-        "supersede": cmd_kn_supersede, "retire": cmd_kn_retire, "verify": cmd_kn_verify, "stale": cmd_kn_stale,
+        "supersede": cmd_kn_supersede, "retire": cmd_kn_retire, "delete": cmd_kn_delete,
+        "verify": cmd_kn_verify, "stale": cmd_kn_stale,
     }
     try:
         if args.cmd == "kn":

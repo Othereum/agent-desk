@@ -5,10 +5,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .core import DeskError, read_text, write_text
+from .core import DeskError, TASK_FILES, read_text, today, write_text
 from .frontmatter import parse_frontmatter, split_frontmatter, update_frontmatter
 from .gitinfo import RepoInfo, repo_info
-from .model import Project, get_project, match_project
+from .model import Project, get_project, load_projects, load_tasks, match_project
 
 
 # Project entries live in projects/<KEY>/knowledge/ (ids K0001...),
@@ -17,8 +17,8 @@ from .model import Project, get_project, match_project
 KN_KINDS = ("decision", "pitfall", "finding", "howto")
 
 
-KN_STATUSES = ("valid", "stale", "superseded", "retired")
-KN_INACTIVE = ("superseded", "retired")  # kept for history, out of injection and search
+KN_STATUSES = ("valid", "stale", "superseded", "retired", "deleted")
+KN_INACTIVE = ("superseded", "retired", "deleted")  # kept for history, out of injection and search
 
 
 class Entry:
@@ -90,6 +90,31 @@ def find_entry(root: Path, project: Project | None, entry_id: str) -> Entry:
         if e.id.casefold() == entry_id.casefold():
             return e
     raise DeskError(f"knowledge 항목을 찾을 수 없습니다: {entry_id}")
+
+
+def entry_references(root: Path, e: Entry) -> list[str]:
+    """`path:line` of every record that mentions the entry's id: task files (archive included)
+    and other knowledge entries (body or frontmatter, e.g. superseded_by). Project ids are
+    numbered per project, so a project entry is looked up in its own project only."""
+    projects = [p for p in load_projects(root) if e.scope in ("global", p.key)]
+    files = [p for proj in projects for t in load_tasks(proj, include_archive=True)
+             for p in (t.dir / name for name in TASK_FILES) if p.exists()]
+    for base in [kn_dir(root, proj) for proj in projects] + [kn_dir(root, None)]:
+        if base.is_dir():
+            files += [p for p in sorted(base.glob("*.md")) if p.name != "index.md" and p != e.path]
+    pattern = re.compile(rf"(?<![A-Za-z0-9]){re.escape(e.id)}(?!\d)", re.I)
+    return [f"{p.as_posix()}:{n}" for p in files
+            for n, line in enumerate(read_text(p).splitlines(), 1) if pattern.search(line)]
+
+
+def tombstone_entry(e: Entry) -> Path:
+    """Replace the entry with a stub that keeps its id taken (so it is never reused) and
+    drops everything else, the slug in the file name included."""
+    path = e.path.with_name(f"{e.id}.md")
+    write_text(path, f"---\nid: {e.id}\nstatus: deleted\ndeleted: {today()}\n---\n")
+    if path != e.path:
+        e.path.unlink()
+    return path
 
 
 def next_entry_id(entries: list[Entry], prefix: str) -> str:
