@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""agent-desk CLI launcher. The code lives in agent_desk.py so Python caches its bytecode
+"""agent-desk CLI launcher. The code lives in the agent_desk package so Python caches its bytecode
 (a script run directly is recompiled on every call, which matters for per-tool-use hooks)."""
 
 import os
