@@ -473,15 +473,6 @@ def resolve_session_task(project: Project, branch: str | None) -> tuple[Task | N
     return (task, "focus") if task else (None, "")
 
 
-def section_line(task: Task, heading: str) -> str:
-    m = re.search(rf"^## {re.escape(heading)}[ \t]*\n(.*?)(?=^## |\Z)", read_text(task.state_path), re.M | re.S)
-    for line in (m.group(1).splitlines() if m else []):
-        s = line.strip().lstrip("-* ").strip()
-        if s and not s.startswith("<!--"):
-            return s[:200]
-    return ""
-
-
 # ---------------------------------------------------------------- index
 
 def write_index(project: Project) -> Path:
@@ -1226,22 +1217,22 @@ def session_start_context(payload: dict) -> str | None:
     cli = f'python "{(PLUGIN_ROOT / "bin" / "desk.py").as_posix()}"'
     branch = info.branch
     head = f"[agent-desk] 프로젝트 {project.key} · 브랜치 {branch or '(detached)'}"
-    kn_line = knowledge_line(root, project, cli)
+    kn_line = knowledge_line(root, project)
     task, source = resolve_session_task(project, branch)
     if not task:
-        lines = [f"{head} · 연결된 작업 없음.", f"CLI: {cli}"] + ([kn_line] if kn_line else [])
+        lines = [f"{head} · 연결된 작업 없음.", f"CLI(아래에서 `desk`로 표기): {cli}"] + ([kn_line] if kn_line else [])
         branchless = [t for t in load_tasks(project) if t.status in OPEN_STATUSES and not t.branches]
         if branchless:
             listed = ", ".join(f"{t.id}({t.meta.get('title', '')})" for t in branchless[:5])
             more = f" 외 {len(branchless) - 5}건" if len(branchless) > 5 else ""
             lines.append(f"진행 중인 브랜치 없는 작업: {listed}{more}. 이어서 할 작업이면 사용자에게 확인하고 "
-                         f"`{cli} focus <id>` 로 포커스를 지정할 것.")
+                         "`desk focus <id>` 로 포커스를 지정할 것.")
         return "\n".join(lines + ["작업 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다."])
     design_doc = task.meta.get("design_doc")
     label = "" if source == "branch" else " · 포커스"
     parts = [f"{head} · 작업 {task.id} ({task.status}{label})",
              f"작업 폴더: {task.dir.as_posix()}"] + ([f"설계 문서: {design_doc}"] if design_doc else []) + [
-             f"CLI: {cli}"] + ([kn_line] if kn_line else [])
+             f"CLI(아래에서 `desk`로 표기): {cli}"] + ([kn_line] if kn_line else [])
     if source == "focus" and branch and not project.is_shared(branch):
         parts.append(f"이 브랜치({branch})에는 연결된 작업이 없어 포커스 작업을 표시한다. 이 브랜치의 일과 관계없을 수 있으니 "
                      "관련이 없으면 사용자에게 확인하고 새 작업을 만들거나 `link` 로 연결할 것.")
@@ -1259,7 +1250,7 @@ def session_start_context(payload: dict) -> str | None:
     parts += parent_context(project, task)
     related = task_list_field(task, "related")
     if related:
-        parts += ["", f"연관 작업: {', '.join(related)} (필요할 때 `{cli} list --all` 로 위치를 찾아 읽을 것)"]
+        parts += ["", f"연관 작업: {', '.join(related)} (필요할 때 `desk list --all` 로 위치를 찾아 읽을 것)"]
     strays = stray_files(task)
     if strays:
         parts += ["", f"경고: 작업 폴더에 예상하지 않은 파일이 있습니다(동기화 충돌 사본일 수 있음): {', '.join(strays)}. 사용자에게 알리고 병합 여부를 확인할 것."]
@@ -1278,27 +1269,27 @@ def parent_context(project: Project, task: Task) -> list[str]:
     except DeskError:
         return ["", f"상위 작업 {parent_id} 를 찾을 수 없음."]
     titles = decision_titles(parent)
-    design_doc = parent.meta.get("design_doc")
-    return (["", f"--- 상위 작업 {parent.id} ({parent.status}): {parent.meta.get('title', '')} ---",
-             f"목표: {section_line(parent, '목표') or '(비어 있음)'}",
-             f"폴더: {parent.dir.as_posix()}"] + ([f"설계 문서: {design_doc}"] if design_doc else []) + [
-             "결정 (본문은 상위 작업의 decisions.md):"] + ([f"- {t}" for t in titles] or ["(없음)"]) +
-            ["상위 작업의 유효한 결정을 따른다. 어긋나는 결정이 필요하면 사용자에게 확인하고 상위 작업의 decisions.md에 기록할 것."])
+    return (["", f"--- 상위 작업 {parent.id} state.md (폴더: {parent.dir.as_posix()}) ---",
+             read_text(parent.state_path).rstrip(),
+             "", "--- 상위 작업 결정 목록 (본문은 상위 작업의 decisions.md) ---"] +
+            ([f"- {t}" for t in titles] or ["(없음)"]) +
+            ["상위 작업은 흐름 전체의 맥락이다. 이 세션의 할 일은 하위 작업 state.md를 따르고, 상위 작업의 유효한 결정을 따른다. "
+             "어긋나는 결정이 필요하면 사용자에게 확인하고 상위 작업의 decisions.md에 기록할 것."])
 
 
-def knowledge_line(root: Path, project: Project, cli: str) -> str | None:
+def knowledge_line(root: Path, project: Project) -> str | None:
     pn = sum(1 for e in load_entries(root, project) if e.status != "superseded")
     gn = sum(1 for e in load_entries(root, None) if e.status != "superseded")
     if not pn and not gn:
         return None
     line = (f"knowledge: 프로젝트 {pn}건 · 전역 {gn}건. 시스템을 조사하거나 수정하기 전에 "
-            f"`{cli} kn search <검색어>` 또는 `kn search --path <파일>` 로 관련 항목을 확인할 것.")
+            "`desk kn search <검색어>` 또는 `desk kn search --path <파일>` 로 관련 항목을 확인할 것.")
     if pn:
         marker = project.dir / DOCTOR_MARKER
         age = (dt.datetime.now().timestamp() - marker.stat().st_mtime) / 86400 if marker.exists() else None
         if age is None or age >= DOCTOR_REMIND_DAYS:
             since = f"{int(age)}일째" if age is not None else "한 번도"
-            line += (f"\ndoctor를 {since} 실행하지 않았다. 사용자에게 `{cli} doctor` 실행을 한 줄로 제안할 것"
+            line += (f"\ndoctor를 {since} 실행하지 않았다. 사용자에게 `desk doctor` 실행을 한 줄로 제안할 것"
                      "(낡은 knowledge 점검).")
     return line
 
