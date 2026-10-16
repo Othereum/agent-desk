@@ -28,6 +28,16 @@ Claude Code 세션 안에서:
 /plugin install agent-desk --marketplace Othereum/agent-desk
 ```
 
+### 업데이트
+
+새 버전은 아래 명령으로 받습니다. 실행 중인 세션에는 `/reload-plugins`를 실행해야 적용됩니다.
+
+```
+claude plugin update agent-desk@agent-desk
+```
+
+직접 추가한 마켓플레이스는 자동 업데이트가 기본으로 꺼져 있습니다. 자동으로 받으려면 `/plugin`의 Marketplaces 탭에서 agent-desk의 자동 업데이트를 켜세요.
+
 데이터 폴더는 환경 변수 `AGENT_DESK_ROOT`로 지정합니다. 지정하지 않으면 `~/agent-desk`를 사용합니다. `~/.claude/settings.json`의 `env`에 넣으면 Claude Code 세션에 적용됩니다.
 
 ```json
