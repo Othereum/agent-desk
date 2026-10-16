@@ -53,6 +53,7 @@ main            ···▶       포커스 작업 (브랜치 없이 main에서 �
 
 ```
 [agent-desk] 프로젝트 myapp · 브랜치 feature/login · 작업 261016-feature__login (active)
+설계 문서: https://claude.ai/artifact/...
 
 --- state.md ---
 ## 현재 상태
