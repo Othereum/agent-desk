@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import os
 import re
@@ -1310,15 +1311,32 @@ def find_toplevel(start: Path) -> Path | None:
     return None
 
 
+def projects_signature(root: Path) -> str:
+    """Hash of (name, mtime) of every project.toml; changes when a project is registered or edited."""
+    sig = []
+    for p in projects_dir(root).glob("*/project.toml"):
+        try:
+            sig.append((p.parent.name, p.stat().st_mtime_ns))
+        except OSError:
+            pass
+    return hashlib.sha1(repr(sorted(sig)).encode("utf-8")).hexdigest()[:16]
+
+
 def project_for_toplevel(root: Path, top: Path, cache: dict) -> Project | None:
-    key = normalize_path(top)
-    if key not in cache:
+    # drop entries from the pre-0.2.2 format (bare project key or null)
+    for k in [k for k, v in cache.items() if not isinstance(v, dict)]:
+        del cache[k]
+    # keyed by data root too: the same session may run under a different AGENT_DESK_ROOT
+    key = f"{normalize_path(root)} | {normalize_path(top)}"
+    sig = projects_signature(root)
+    entry = cache.get(key)
+    if not isinstance(entry, dict) or entry.get("sig") != sig:
         remotes = [u for name in (git(top, "remote") or "").split() if (u := git(top, "remote", "get-url", name))]
         project = match_project(root, RepoInfo(top, None, remotes))
-        cache[key] = project.key if project else None
-    if not cache[key]:
+        entry = cache[key] = {"project": project.key if project else None, "sig": sig}
+    if not entry["project"]:
         return None
-    pdir = projects_dir(root) / cache[key]
+    pdir = projects_dir(root) / entry["project"]
     try:
         return Project(pdir.name, pdir, tomllib.loads(read_text(pdir / "project.toml")))
     except (OSError, tomllib.TOMLDecodeError):
