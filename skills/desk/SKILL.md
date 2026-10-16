@@ -25,6 +25,7 @@ python <desk.py> close <id> done|abandoned [--note "..."]
 python <desk.py> reopen <id>
 python <desk.py> index                                # 작업·knowledge index.md 재생성
 python <desk.py> kn search|list|add|supersede|verify|stale ...   # knowledge (agent-desk:kn 스킬)
+python <desk.py> doctor [--apply]                     # 낡은 knowledge·충돌 사본·방치된 작업 점검 (agent-desk:kn 스킬)
 ```
 `--project KEY`와 `--cwd DIR`은 하위 명령 **앞에** 둔다. 출력은 JSON이다.
 

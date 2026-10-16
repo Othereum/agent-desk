@@ -115,7 +115,8 @@ def parse_frontmatter(text: str) -> dict:
         if ":" not in line or line.lstrip().startswith("#"):
             continue
         key, _, raw = line.partition(":")
-        raw = raw.split(" #", 1)[0].strip()
+        # an inline comment needs two spaces before `#`, so a title like "PR #12" survives
+        raw = re.split(r"\s{2,}#", raw, maxsplit=1)[0].strip()
         data[key.strip()] = _parse_list(raw) if raw.startswith("[") and raw.endswith("]") else raw
     return data
 
@@ -1143,11 +1144,11 @@ def cmd_close(args) -> None:
     task = get_task(project, args.id)
     if task.archived:
         raise DeskError("이미 아카이브된 작업입니다")
-    set_meta(task, {"status": args.result})
-    append_log(task, [f"작업 종료: {args.result}"] + ([args.note] if args.note else []))
     dest = project.dir / "archive" / task.id
     if dest.exists():
         raise DeskError(f"아카이브에 같은 ID가 이미 있습니다: {dest}")
+    set_meta(task, {"status": args.result})
+    append_log(task, [f"작업 종료: {args.result}"] + ([args.note] if args.note else []))
     dest.parent.mkdir(parents=True, exist_ok=True)
     import shutil
     shutil.move(str(task.dir), str(dest))
