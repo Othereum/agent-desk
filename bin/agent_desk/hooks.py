@@ -45,15 +45,16 @@ def session_start_context(payload: dict) -> str | None:
     kn_line = knowledge_line(root, project)
     task, source = resolve_session_task(project, branch)
     if not task:
-        lines = [f"{head} · 연결된 작업 없음.", f"CLI(아래에서 `desk`로 표기): {cli}"] + ([kn_line] if kn_line else [])
+        # an unreadable task may be this branch's: say so before anything suggests a new task
+        lines = ([f"{head} · 연결된 작업 없음."] + broken_task_lines(project) +
+                 [f"CLI(아래에서 `desk`로 표기): {cli}"] + ([kn_line] if kn_line else []))
         branchless = [t for t in load_tasks(project) if t.status in OPEN_STATUSES and not t.branches]
         if branchless:
             listed = ", ".join(f"{t.id}({t.meta.get('title', '')})" for t in branchless[:5])
             more = f" 외 {len(branchless) - 5}건" if len(branchless) > 5 else ""
             lines.append(f"진행 중인 브랜치 없는 작업: {listed}{more}. 이어서 할 작업이면 사용자에게 확인하고 "
                          "`desk focus <id>` 로 포커스를 지정할 것.")
-        return "\n".join(lines + broken_task_lines(project) +
-                         ["작업 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다."])
+        return "\n".join(lines + ["작업 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다."])
     design_doc = task.meta.get("design_doc")
     label = "" if source == "branch" else " · 포커스"
     parts = [f"{head} · 작업 {task.id} ({task.status}{label})",

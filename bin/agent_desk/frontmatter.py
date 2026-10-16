@@ -7,7 +7,7 @@ A defined subset of YAML, read strictly so a file is never silently misread:
 - Comments: a line starting with `#`, or `#` after whitespace outside quotes (standard YAML).
 Anything else (nested maps, block scalars `|` `>`, anchors, flow maps, duplicate keys) is
 an error. Writes quote values that would be ambiguous and replace only the lines of the keys
-being updated, so comments and block lists elsewhere survive.
+being updated, so comments and block lists of other keys survive.
 """
 
 from __future__ import annotations
@@ -77,7 +77,7 @@ def _scalar(s: str, i: int, stops: str = "") -> tuple[str, int]:
     c = s[i]
     if c in "\"'":
         return _quoted(s, i)
-    if c in _UNSUPPORTED_START or (stops and c in "[{"):
+    if c in _UNSUPPORTED_START or (stops and c in "[{#"):
         raise ValueError(f"지원하지 않는 YAML 문법({c})")
     value = s[i:_plain_end(s, i, stops)].rstrip()
     return value, i + len(value)
@@ -125,8 +125,9 @@ def _value(raw: str) -> tuple[str | list[str], str]:
 
 
 def _parse(fm_lines: list[str]) -> tuple[dict, dict]:
-    """Returns (data, spans). spans[key]: start/end line indexes (end exclusive), kind
-    (scalar | flow | block), the key line's trailing comment, block item indent and lines."""
+    """Returns (data, spans). spans[key]: start/end line indexes (end exclusive, covering block
+    items), kind (scalar | flow | empty | block; items may follow only empty or block) and the
+    key line's trailing comment."""
     data, spans, key = {}, {}, None
     for n, line in enumerate(fm_lines):
         try:
@@ -141,9 +142,8 @@ def _parse(fm_lines: list[str]) -> tuple[dict, dict]:
                 if item.group(2) and item.group(2)[0] not in "\"'" and re.search(r":(\s|$)", value):
                     raise ValueError("목록 항목 안의 `key: value`(중첩 구조)는 지원하지 않습니다. 문자열이면 따옴표로 감쌀 것")
                 if sp["kind"] == "empty":
-                    sp["kind"], sp["indent"], data[key] = "block", item.group(1), []
+                    sp["kind"], data[key] = "block", []
                 data[key].append(value)
-                sp["items"].append((value, line))
                 sp["end"] = n + 1
                 continue
             m = _KEY.match(line)
@@ -156,8 +156,7 @@ def _parse(fm_lines: list[str]) -> tuple[dict, dict]:
             empty = value == "" and not m.group(2).split("#")[0].strip()
             kind = "flow" if isinstance(value, list) else "empty" if empty else "scalar"
             data[key] = value
-            spans[key] = {"start": n, "end": n + 1, "kind": kind, "comment": comment,
-                          "indent": "  -", "items": []}
+            spans[key] = {"start": n, "end": n + 1, "kind": kind, "comment": comment}
         except ValueError as e:
             raise DeskError(f"frontmatter {n + 2}번째 줄: {e}: {line.strip()}") from None
     return data, spans
@@ -198,17 +197,10 @@ def update_frontmatter(text: str, updates: dict) -> str:
     fm_lines, body = split_frontmatter(text)
     _, spans = _parse(fm_lines)
     out = list(fm_lines)
+    # the CLI only rewrites fields it manages (status, related, branches...): an updated key is
+    # written in canonical form (a block list becomes a flow list), keeping the key line's comment
     for key in sorted((k for k in updates if k in spans), key=lambda k: spans[k]["start"], reverse=True):
-        sp, value = spans[key], updates[key]
-        if isinstance(value, list) and sp["kind"] == "block" and value:
-            # keep the block form and each kept item's own line (with its comment)
-            old = list(sp["items"])
-            lines = [fm_lines[sp["start"]]]
-            for v in value:
-                hit = next((i for i, (ov, _) in enumerate(old) if ov == str(v)), None)
-                lines.append(old.pop(hit)[1] if hit is not None else f"{sp['indent']} {format_scalar(v)}")
-        else:
-            lines = [f"{key}: {format_value(value)}".rstrip() + sp["comment"]]
-        out[sp["start"]:sp["end"]] = lines
+        sp = spans[key]
+        out[sp["start"]:sp["end"]] = [f"{key}: {format_value(updates[key])}".rstrip() + sp["comment"]]
     out.extend(f"{k}: {format_value(v)}".rstrip() for k, v in updates.items() if k not in spans)
     return "---\n" + "\n".join(out) + "\n---\n" + body

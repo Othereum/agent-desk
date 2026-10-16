@@ -204,6 +204,11 @@ def build_id(project: Project, branch: str | None, slug: str | None) -> str:
 def check_branch_free(project: Project, branch: str, task_id: str | None = None) -> None:
     if project.is_shared(branch):
         raise DeskError(f"공용 브랜치는 작업에 연결할 수 없습니다: {branch}")
+    # an unreadable state.md hides its branches, so this branch may already be taken
+    broken = [t.id for t in load_tasks(project) if t.status == "?"]
+    if broken:
+        raise DeskError(f"state.md frontmatter를 읽을 수 없는 작업이 있어 브랜치 중복을 확인할 수 없습니다: "
+                        f"{', '.join(broken)}. 먼저 고치세요(doctor로 위치 확인)")
     owner = find_task_by_branch(project, branch)
     if owner and (task_id is None or owner.id.casefold() != task_id.casefold()):
         raise DeskError(f"브랜치 {branch} 는 이미 진행 중인 작업 {owner.id} 에 연결되어 있습니다")

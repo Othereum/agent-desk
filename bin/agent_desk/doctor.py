@@ -99,7 +99,7 @@ def missing_refs(e: Entry, top: Path) -> list[str]:
 
 
 def title_comment_issue(path: Path, comment: str) -> dict:
-    # before 0.3.4 titles were written unquoted, so "PR #12" now reads as "PR" plus a comment
+    # before 0.4.0 titles were written unquoted, so "PR #12" now reads as "PR" plus a comment
     return {"level": "warn", "kind": "frontmatter-title-comment", "target": path.as_posix(),
             "message": f"title 줄의 `{comment.strip()}` 부분이 주석으로 읽힌다. 제목의 일부라면 title 값을 따옴표로 감쌀 것"}
 

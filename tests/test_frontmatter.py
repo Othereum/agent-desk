@@ -52,7 +52,7 @@ class Parse(unittest.TestCase):
         for lines in [("a:", "  b: nested"), ("a: |", "  text"), ("a: &anchor x",), ("a: {k: v}",),
                       ("a: x", "a: y"), ('a: "open',), ('a: "x" tail',), ("a: - x",),
                       ("a:", "  - k: v"), ("a: x", "  continued"), ("not a key",), ("a: [x, [y]]",),
-                      ("a: [x y",), ('a: "bad \\q"',), ("a: x", "- stray")]:
+                      ("a: [x y",), ("a: [#x]",), ('a: "bad \\q"',), ("a: x", "- stray")]:
             with self.subTest(lines=lines), self.assertRaises(DeskError):
                 parse_frontmatter(fm(*lines))
 
@@ -89,15 +89,17 @@ class Update(unittest.TestCase):
         self.assertEqual(out, fm("# head", "status: paused  # note", "links:", "  - u1  # c1",
                                  'title: "PR #12"', "new: [a]"))
 
-    def test_block_list_keeps_form_and_item_comments(self):
-        text = fm("links:", "    - u1  # c1", "    - u2  # c2", "x: y")
-        out = update_frontmatter(text, {"links": ["u2", "u3, z"]})
-        self.assertEqual(out, fm("links:", "    - u2  # c2", "    - u3, z", "x: y"))
-        self.assertEqual(parse_frontmatter(out)["links"], ["u2", "u3, z"])
+    def test_block_list_rewritten_as_flow_list(self):
+        text = fm("related:  # keep", "  - a  # item note", "  # between", "  - b", "x: y")
+        out = update_frontmatter(text, {"related": ["b", "c, d"]})
+        self.assertEqual(out, fm('related: [b, "c, d"]  # keep', "x: y"))
+        self.assertEqual(parse_frontmatter(out)["related"], ["b", "c, d"])
+        self.assertEqual(update_frontmatter(fm("links:", "  - u1", "x: y"), {"links": []}), fm("links: []", "x: y"))
 
-    def test_block_list_emptied(self):
-        out = update_frontmatter(fm("links:", "  - u1", "x: y"), {"links": []})
-        self.assertEqual(out, fm("links: []", "x: y"))
+    def test_other_block_lists_untouched(self):
+        text = fm("links:", "  - u1  # c1", "  # between", "  - u2", "status: active")
+        self.assertEqual(update_frontmatter(text, {"status": "paused"}),
+                         fm("links:", "  - u1  # c1", "  # between", "  - u2", "status: paused"))
 
     def test_flow_list_and_empty_value(self):
         out = update_frontmatter(fm("branches: []", "parent:", "x: y"), {"branches": ["b"], "parent": "p"})
