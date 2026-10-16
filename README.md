@@ -15,9 +15,17 @@
 
 ## 설치
 
+셸에서:
+
 ```
-claude plugin marketplace add <이 저장소의 경로 또는 git URL>
+claude plugin marketplace add Othereum/agent-desk
 claude plugin install agent-desk@agent-desk
+```
+
+Claude Code 세션 안에서:
+
+```
+/plugin install agent-desk --marketplace Othereum/agent-desk
 ```
 
 데이터 폴더는 환경 변수 `AGENT_DESK_ROOT`로 지정합니다. 지정하지 않으면 `~/agent-desk`를 사용합니다. `~/.claude/settings.json`의 `env`에 넣으면 Claude Code 세션에 적용됩니다.
