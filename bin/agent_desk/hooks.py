@@ -145,8 +145,45 @@ SESSION_TTL_DAYS = 7
 KN_INJECT_LIMIT = 5
 
 
+def safe_name(name: str | None) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", name or "unknown")
+
+
 def session_file(session_id: str | None) -> Path:
-    return session_dir() / (re.sub(r"[^A-Za-z0-9_.-]", "_", session_id or "unknown") + ".json")
+    return session_dir() / (safe_name(session_id) + ".json")
+
+
+def shown_dir(session_id: str | None) -> Path:
+    """Entries already injected: one empty file per entry under shown/<agent>/.
+
+    Hooks of parallel tool calls run concurrently, so `shown` is not kept in the session JSON
+    (a load-modify-save there loses what another hook saved in between). Creating a file with
+    O_EXCL is atomic: the hook that creates it injects the entry, any other skips it."""
+    return session_dir() / safe_name(session_id) / "shown"
+
+
+def claim_shown(base: Path, entry_id: str) -> bool:
+    """True when this hook is the first to show the entry to the agent, recording it."""
+    try:
+        os.close(os.open(base / entry_id, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+        return True
+    except FileExistsError:
+        return False
+    except OSError:  # cannot record: inject anyway, the worst case is a repeat
+        return True
+
+
+def reset_shown(session_id: str | None) -> None:
+    """After compact or clear the injected entries may be gone from context: allow them again.
+    Renamed first, so a concurrent hook sees either the old record or none, never half of it."""
+    base = shown_dir(session_id)
+    old = base.with_name(f"shown.{os.getpid()}.old")
+    try:
+        base.rename(old)
+    except OSError:
+        return
+    import shutil
+    shutil.rmtree(old, ignore_errors=True)
 
 
 def load_session(session_id: str | None) -> dict:
@@ -157,9 +194,22 @@ def load_session(session_id: str | None) -> dict:
 
 
 def save_session(session_id: str | None, data: dict) -> None:
+    # write then rename, so a concurrent hook never reads a half-written file. The JSON holds
+    # only the repos cache (a lost update costs one git call) and the location, which only
+    # SessionStart and UserPromptSubmit write, and those do not run alongside tool hooks.
     try:
         session_dir().mkdir(parents=True, exist_ok=True)
-        session_file(session_id).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        path = session_file(session_id)
+        tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        for _ in range(20):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:  # Windows: another hook has the file open for a moment
+                import time
+                time.sleep(0.005)
+        tmp.unlink()
     except OSError:
         pass
 
@@ -169,11 +219,15 @@ def prune_sessions() -> None:
     if not base.is_dir():
         return
     cutoff = dt.datetime.now().timestamp() - SESSION_TTL_DAYS * 86400
-    for p in base.iterdir():  # session caches, kn indexes, leftover .tmp files
+    for p in base.iterdir():  # session caches and shown dirs, kn indexes, leftover .tmp files
         try:
-            if p.stat().st_mtime < cutoff:
+            if p.is_dir():
+                if max(Path(d).stat().st_mtime for d, _, _ in os.walk(p)) < cutoff:
+                    import shutil
+                    shutil.rmtree(p, ignore_errors=True)
+            elif p.stat().st_mtime < cutoff:
                 p.unlink()
-        except OSError:
+        except (OSError, ValueError):
             pass
 
 
@@ -295,24 +349,35 @@ def post_tool_use_context(payload: dict) -> str | None:
         return None
     sid = payload.get("session_id")
     session = load_session(sid)
-    project = project_for_toplevel(root, top, session.setdefault("repos", {}))
-    if not project:
+    if not isinstance(session.get("repos"), dict):
+        session["repos"] = {}
+    before = dict(session["repos"])
+    project = project_for_toplevel(root, top, session["repos"])
+    if session["repos"] != before:
         save_session(sid, session)
+    if not project:
         return None
     rel = repo_relative(str(path), top)
-    # subagent tool calls share the session_id but have their own context: track per agent
-    agent = payload.get("agent_id") or "main"
-    shown_by_agent = session.get("shown")
-    if not isinstance(shown_by_agent, dict):  # pre-0.2.3 format: list for the main agent
-        shown_by_agent = {"main": shown_by_agent or []}
-    shown = set(shown_by_agent.get(agent, []))
     rel_cf = rel.casefold()
-    matched = [e for e in kn_hook_index(root, project) if e["id"] not in shown
-               and any(rel_cf.startswith(pre) and glob_regex(g).match(rel) for g, pre in e["paths"])]
+    matched = [e for e in kn_hook_index(root, project)
+               if any(rel_cf.startswith(pre) and glob_regex(g).match(rel) for g, pre in e["paths"])]
     if not matched:
-        save_session(sid, session)
         return None
-    picked, rest = matched[:KN_INJECT_LIMIT], matched[KN_INJECT_LIMIT:]
+    # subagent tool calls share the session_id but have their own context: track per agent
+    base = shown_dir(sid) / safe_name(payload.get("agent_id") or "main")
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    picked, rest = [], 0
+    for e in matched:
+        if len(picked) < KN_INJECT_LIMIT:
+            if claim_shown(base, e["id"]):
+                picked.append(e)
+        elif not (base / e["id"]).exists():
+            rest += 1
+    if not picked:
+        return None
     lines = [f"[agent-desk knowledge] {rel} 관련 항목:"]
     for e in picked:
         flags = [e["kind"]] + (["재확인 필요"] if e["status"] == "stale" else [])
@@ -325,12 +390,9 @@ def post_tool_use_context(payload: dict) -> str | None:
             line += f" · 재확인 사유: {e['stale_reason']}"
         lines.append(line)
     if rest:
-        lines.append(f"- 외 {len(rest)}건: `kn search --path {rel}`")
+        lines.append(f"- 외 {rest}건: `kn search --path {rel}`")
     lines.append(f"항목 파일: {kn_dir(root, project).as_posix()}/<ID>-*.md. "
                  "태스크에 영향을 주는 항목은 본문을 읽고 반영할 것 (agent-desk:kn).")
-    shown_by_agent[agent] = sorted(shown | {e["id"] for e in picked})
-    session["shown"] = shown_by_agent
-    save_session(sid, session)
     return "\n".join(lines)
 
 
@@ -375,10 +437,7 @@ def cmd_hook(event: str) -> None:
         if event == "session-start":
             sid = payload.get("session_id")
             if payload.get("source") in ("compact", "clear"):
-                # injected knowledge may be gone from context; allow re-injection
-                session = load_session(sid)
-                session.pop("shown", None)
-                save_session(sid, session)
+                reset_shown(sid)
             elif payload.get("source") == "startup":
                 prune_sessions()
             context, event = session_start_context(payload), "SessionStart"
