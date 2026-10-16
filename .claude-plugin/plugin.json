@@ -2,6 +2,6 @@
   "name": "agent-desk",
   "version": "0.5.2",
   "description": "코딩 에이전트가 태스크의 현재 상태·결정·히스토리를 기록하고 조회하는 개인용 태스크 기록 공간",
-  "author": { "name": "이석진" },
+  "author": { "name": "Othereum" },
   "license": "MIT"
 }
