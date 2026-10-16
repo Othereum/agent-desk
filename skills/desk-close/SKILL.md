@@ -1,6 +1,6 @@
 ---
 name: desk-close
-description: agent-desk 태스크를 종료(done/abandoned)하고 아카이브한다. 종료 전에 저장소 문서 반영 여부와 설계 문서를 점검하고, 오래 남길 사실을 knowledge로 추출한다. 사용자가 태스크 종료·정리·아카이브를 요청할 때 사용한다.
+description: agent-desk 태스크를 종료(done/abandoned)하고 아카이브한다. 종료 전에 저장소 문서 반영 여부와 설계 문서를 점검하고, 오래 남길 사실을 지식(knowledge)으로 추출한다. 사용자가 태스크 종료(완료·중단)·정리·아카이브를 요청할 때 사용한다.
 ---
 
 # agent-desk 태스크 종료

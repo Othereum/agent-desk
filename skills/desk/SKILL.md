@@ -1,11 +1,29 @@
 ---
 name: desk
-description: agent-desk 태스크 기록(state·decisions·log)을 읽고 갱신하는 상시 규칙. 세션 컨텍스트에 "[agent-desk]" 블록이 있을 때, 사용자와 방향·설계를 확정했을 때, 태스크 단계가 끝났을 때, 새 브랜치를 만들었을 때, 사용자가 태스크 현황·결정·이력의 기록이나 조회를 요청할 때 사용한다.
+description: agent-desk 데스크의 태스크 기록(현황 state·결정 decisions·로그 log)을 읽고 갱신하는 상시 규칙과 데스크 용어. 세션 컨텍스트에 "[agent-desk]" 블록이 있을 때, 사용자와 방향·설계를 확정했을 때, 태스크 단계가 끝났을 때, 새 브랜치를 만들었을 때, 사용자가 데스크나 태스크의 현황·결정·로그를 기록하거나 조회하라고 할 때 사용한다.
 ---
 
 # agent-desk 기록 규칙
 
-에이전트가 태스크 단위의 현재 상태, 결정, 히스토리를 세션을 넘어 이어가기 위한 개인용 기록 공간이다.
+에이전트가 태스크 단위의 현황, 결정, 로그를 세션을 넘어 이어가기 위한 개인용 기록 공간(데스크)이다.
+
+## 용어
+
+사용자와 에이전트가 같은 이름으로 부른다. 짧게 부르고, 문맥으로 해석하고, 모호하면 한 줄로 되묻는다. 사용자에게 말하거나 기록할 때도 이 이름을 쓴다.
+
+| 이름 | 가리키는 것 |
+|---|---|
+| 데스크 | agent-desk가 관리하는 기록 전체(태스크 기록 + 지식). "데스크에 남겨줘", "데스크 점검해줘" |
+| 프로젝트 | 등록한 저장소 |
+| 태스크 기록 | 태스크 하나의 현황·결정·로그 |
+| 현황 | state.md. "상태"는 태스크 상태(진행 중 active, 보류 paused, 완료 done, 중단 abandoned)에만 쓴다 |
+| 결정 | decisions.md의 항목(D번호). 지식의 decision 항목도 "결정"이라 부르며 문맥과 번호(D/K)로 구분한다. 둘이 함께 나오는 맥락에서는 "태스크 결정"과 "설계 결정"으로 나눠 말한다 |
+| 로그 | log.md |
+| 지식 | knowledge 항목(K·G번호). 일반적인 뜻의 지식과 구분이 필요하면 "knowledge"라고 쓴다. 종류는 설계 결정(decision)·함정(pitfall)·발견(finding)·방법(howto), 상태는 유효·재확인 필요(stale)·대체됨·폐기(retired)·삭제 |
+| 상위·하위·연관 태스크 | parent, 그 아래 태스크, related |
+| 포커스 태스크 | 브랜치 없이 일할 때 세션이 다루는 태스크 |
+| 아카이브 | 종료된 태스크를 옮겨 두는 곳 |
+| 데스크 점검 | `adesk doctor` |
 
 ## CLI
 
@@ -36,9 +54,9 @@ ID 생성, 브랜치 중복 검사, 상태 전환, 아카이브 이동은 반드
 ```
 <root>/projects/<KEY>/project.toml        # 프로젝트 설정 (id_template, shared_branches)
 <root>/projects/<KEY>/index.md            # 자동 생성, 직접 수정 금지
-<root>/projects/<KEY>/tasks/<id>/state.md       # 현재 상태: 덮어씀
+<root>/projects/<KEY>/tasks/<id>/state.md       # 현황: 덮어씀
 <root>/projects/<KEY>/tasks/<id>/decisions.md   # 결정: 항목 추가
-<root>/projects/<KEY>/tasks/<id>/log.md         # 히스토리: 덧붙이기만
+<root>/projects/<KEY>/tasks/<id>/log.md         # 로그: 덧붙이기만
 <root>/projects/<KEY>/archive/<id>/...    # 종료된 태스크
 <root>/projects/<KEY>/knowledge/K0001-*.md      # 프로젝트 knowledge
 <root>/knowledge/G0001-*.md               # 전역 knowledge
@@ -77,7 +95,7 @@ ID 생성, 브랜치 중복 검사, 상태 전환, 아카이브 이동은 반드
 
 frontmatter(state.md, knowledge 항목)는 YAML의 일부만 읽는다. 맨 앞 열의 `key: 값`과 목록(`[a, "b, c"]`, 또는 빈 `key:` 아래 `  - 항목`)만 쓴다. `#`나 `: `가 들어간 값은 따옴표로 감싼다. 줄 끝 주석(`  # 설명`)은 쓸 수 있다. 중첩 구조, 여러 줄 값(`|`, `>`)은 오류가 되어 그 태스크가 목록에서 빠지므로 쓰지 않는다. 고친 직후 hook이 오류를 알려 주면 바로 고친다.
 
-### state.md (현재 상태, 덮어씀)
+### state.md (현황, 덮어씀)
 - 세션 시작 시 이것만 읽어도 이어서 작업할 수 있게 쓴다. **60줄 이내**를 유지하고, 넘으면 지난 내용을 log.md로 옮긴다.
 - 섹션: 목표 / 현재 상태 / 다음 할 일 / 미해결 질문 / 핵심 파일(`경로:줄 — 역할`) / 관련 지식(`- K0012 제목`).
 - frontmatter의 `design_doc`에는 Claude Docs 설계 문서 URL을 둔다(아래 "문서 위치 기준").
