@@ -1240,9 +1240,10 @@ def parent_context(project: Project, task: Task) -> list[str]:
     except DeskError:
         return ["", f"상위 작업 {parent_id} 를 찾을 수 없음."]
     titles = decision_titles(parent)
+    design_doc = parent.meta.get("design_doc")
     return (["", f"--- 상위 작업 {parent.id} ({parent.status}): {parent.meta.get('title', '')} ---",
              f"목표: {section_line(parent, '목표') or '(비어 있음)'}",
-             f"폴더: {parent.dir.as_posix()}",
+             f"폴더: {parent.dir.as_posix()}"] + ([f"설계 문서: {design_doc}"] if design_doc else []) + [
              "결정 (본문은 상위 작업의 decisions.md):"] + ([f"- {t}" for t in titles] or ["(없음)"]) +
             ["상위 작업의 유효한 결정을 따른다. 어긋나는 결정이 필요하면 사용자에게 확인하고 상위 작업의 decisions.md에 기록할 것."])
 
