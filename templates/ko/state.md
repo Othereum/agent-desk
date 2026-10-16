@@ -6,6 +6,8 @@ project: {{project}}
 branches: {{branches}}
 links: []
 design_doc:
+parent: {{parent}}
+related: {{related}}
 created: {{date}}
 updated: {{date}}
 verified: {{date}}

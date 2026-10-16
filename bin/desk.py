@@ -355,7 +355,7 @@ def render_template(lang: str, name: str, values: dict) -> str:
     text = read_text(path)
     for k, v in values.items():
         text = text.replace("{{" + k + "}}", v)
-    return text
+    return re.sub(r"[ \t]+$", "", text, flags=re.M)
 
 
 def append_log(task: Task, lines: list[str]) -> None:
@@ -373,6 +373,39 @@ def set_meta(task: Task, updates: dict) -> None:
     task.meta.update(updates)
 
 
+# ---------------------------------------------------------------- relations
+# A task may have one parent (one level only: a parent cannot itself have a parent)
+# and a free list of related tasks. Both are stored by task id.
+
+def task_list_field(task: Task, key: str) -> list[str]:
+    v = task.meta.get(key, [])
+    return v if isinstance(v, list) else [v] if v else []
+
+
+def children_of(project: Project, task_id: str, open_only: bool = False) -> list[Task]:
+    return [t for t in load_tasks(project, include_archive=not open_only)
+            if (t.meta.get("parent") or "").casefold() == task_id.casefold()
+            and (not open_only or t.status in OPEN_STATUSES)]
+
+
+def resolve_parent(project: Project, parent_id: str, child_id: str | None = None) -> Task:
+    parent = get_task(project, parent_id)
+    if child_id and parent.id.casefold() == child_id.casefold():
+        raise DeskError("자기 자신을 상위 작업으로 지정할 수 없습니다")
+    if parent.meta.get("parent"):
+        raise DeskError(f"상위 작업은 한 단계만 둘 수 있습니다: {parent.id} 는 이미 {parent.meta['parent']} 의 하위 작업입니다")
+    return parent
+
+
+def section_line(task: Task, heading: str) -> str:
+    m = re.search(rf"^## {re.escape(heading)}[ \t]*\n(.*?)(?=^## |\Z)", read_text(task.state_path), re.M | re.S)
+    for line in (m.group(1).splitlines() if m else []):
+        s = line.strip().lstrip("-* ").strip()
+        if s and not s.startswith("<!--"):
+            return s[:200]
+    return ""
+
+
 # ---------------------------------------------------------------- index
 
 def write_index(project: Project) -> Path:
@@ -383,10 +416,11 @@ def write_index(project: Project) -> Path:
                     key=lambda t: t.meta.get("updated", ""), reverse=True)
 
     def row(t: Task) -> str:
-        cells = [t.id, t.meta.get("title", ""), t.status, ", ".join(t.branches), t.meta.get("updated", "")]
+        cells = [t.id, t.meta.get("title", ""), t.status, ", ".join(t.branches),
+                 t.meta.get("parent", "") or "", t.meta.get("updated", "")]
         return "| " + " | ".join(c.replace("|", "\\|") for c in cells) + " |"
 
-    head = "| ID | 제목 | 상태 | 브랜치 | 갱신일 |\n|---|---|---|---|---|\n"
+    head = "| ID | 제목 | 상태 | 브랜치 | 상위 | 갱신일 |\n|---|---|---|---|---|---|\n"
     text = (f"# {project.key} 작업 목록\n\n"
             "<!-- desk.py index 가 생성하는 파일입니다. 직접 수정하지 마세요. -->\n\n"
             "## 진행\n\n" + (head + "\n".join(row(t) for t in open_tasks) if open_tasks else "(없음)") +
@@ -905,17 +939,58 @@ def cmd_new(args) -> None:
         if not branch:
             raise DeskError("현재 브랜치를 알 수 없습니다. --branch 또는 --no-branch 를 지정하세요")
         check_branch_free(project, branch)
+    parent = resolve_parent(project, args.parent) if args.parent else None
+    related = [get_task(project, r).id for r in split_csv(args.related)]
     task_id = build_id(project, branch, args.slug)
     tdir = project.dir / "tasks" / task_id
     values = {
         "id": task_id, "title": args.title, "project": project.key,
         "branches": _format_value([branch] if branch else []),
+        "parent": parent.id if parent else "", "related": _format_value(related),
         "date": today(), "datetime": now_minute(),
     }
     for name in TASK_FILES:
         write_text(tdir / name, render_template(project.lang, name, values))
     write_index(project)
-    out({"task": task_id, "dir": str(tdir), "branch": branch})
+    out({"task": task_id, "dir": str(tdir), "branch": branch,
+         "parent": parent.id if parent else None, "related": related})
+
+
+def cmd_relate(args) -> None:
+    root = ensure_root()
+    project, _ = current_project(root, Path(args.cwd), args.project)
+    task = get_task(project, args.id)
+    updates, logs = {}, []
+    if args.parent:
+        if children_of(project, task.id):
+            raise DeskError(f"{task.id} 에 하위 작업이 있어 상위 작업을 지정할 수 없습니다(한 단계만 허용)")
+        parent = resolve_parent(project, args.parent, task.id)
+        updates["parent"] = parent.id
+        logs.append(f"상위 작업 지정: {parent.id}")
+    elif args.no_parent and task.meta.get("parent"):
+        updates["parent"] = ""
+        logs.append(f"상위 작업 해제: {task.meta['parent']}")
+    related = task_list_field(task, "related")
+    for r in split_csv(args.add):
+        rid = get_task(project, r).id
+        if rid.casefold() == task.id.casefold():
+            raise DeskError("자기 자신을 연관 작업으로 지정할 수 없습니다")
+        if rid.casefold() not in (x.casefold() for x in related):
+            related.append(rid)
+            logs.append(f"연관 작업 추가: {rid}")
+    for r in split_csv(args.remove):
+        kept = [x for x in related if x.casefold() != r.casefold()]
+        if len(kept) != len(related):
+            related = kept
+            logs.append(f"연관 작업 제거: {r}")
+    if related != task_list_field(task, "related"):
+        updates["related"] = related
+    if updates:
+        set_meta(task, updates)
+        append_log(task, logs)
+        write_index(project)
+    out({"task": task.id, "parent": task.meta.get("parent") or None,
+         "related": task_list_field(task, "related"), "changed": bool(updates)})
 
 
 def cmd_link(args) -> None:
@@ -967,7 +1042,9 @@ def cmd_close(args) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(task.dir), str(dest))
     write_index(project)
-    out({"task": task.id, "status": args.result, "dir": str(dest)})
+    open_children = [t.id for t in children_of(project, task.id, open_only=True)]
+    out({"task": task.id, "status": args.result, "dir": str(dest),
+         **({"warning": f"진행 중인 하위 작업이 남아 있습니다: {', '.join(open_children)}"} if open_children else {})})
 
 
 def cmd_reopen(args) -> None:
@@ -995,6 +1072,7 @@ def cmd_list(args) -> None:
         for t in load_tasks(p, include_archive=args.all):
             rows.append({"project": p.key, "id": t.id, "title": t.meta.get("title", ""),
                          "status": t.status, "branches": t.branches,
+                         "parent": t.meta.get("parent") or None,
                          "updated": t.meta.get("updated", ""), "archived": t.archived})
     out(rows)
 
@@ -1046,6 +1124,10 @@ def session_start_context(payload: dict) -> str | None:
              read_text(task.state_path).rstrip()]
     titles = decision_titles(task)
     parts += ["", "--- 결정 목록 (본문은 decisions.md) ---"] + ([f"- {t}" for t in titles] or ["(없음)"])
+    parts += parent_context(project, task)
+    related = task_list_field(task, "related")
+    if related:
+        parts += ["", f"연관 작업: {', '.join(related)} (필요할 때 `{cli} list --all` 로 위치를 찾아 읽을 것)"]
     strays = stray_files(task)
     if strays:
         parts += ["", f"경고: 작업 폴더에 예상하지 않은 파일이 있습니다(동기화 충돌 사본일 수 있음): {', '.join(strays)}. 사용자에게 알리고 병합 여부를 확인할 것."]
@@ -1053,6 +1135,22 @@ def session_start_context(payload: dict) -> str | None:
         parts += ["", "컨텍스트가 방금 압축되었다. 압축 전 진행 내용과 결정이 state.md·decisions.md·log.md에 반영되어 있는지 확인하고, 빠진 내용이 있으면 지금 기록할 것."]
     parts += ["", "위 기록은 확인할 출발점이다. 코드와 다를 수 있으니 의존하기 전에 검증하고, 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다."]
     return "\n".join(parts)
+
+
+def parent_context(project: Project, task: Task) -> list[str]:
+    parent_id = task.meta.get("parent")
+    if not parent_id:
+        return []
+    try:
+        parent = get_task(project, parent_id)
+    except DeskError:
+        return ["", f"상위 작업 {parent_id} 를 찾을 수 없음."]
+    titles = decision_titles(parent)
+    return (["", f"--- 상위 작업 {parent.id} ({parent.status}): {parent.meta.get('title', '')} ---",
+             f"목표: {section_line(parent, '목표') or '(비어 있음)'}",
+             f"폴더: {parent.dir.as_posix()}",
+             "결정 (본문은 상위 작업의 decisions.md):"] + ([f"- {t}" for t in titles] or ["(없음)"]) +
+            ["상위 작업의 유효한 결정을 따른다. 어긋나는 결정이 필요하면 사용자에게 확인하고 상위 작업의 decisions.md에 기록할 것."])
 
 
 def knowledge_line(root: Path, project: Project, cli: str) -> str | None:
@@ -1230,6 +1328,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--slug", help="브랜치 없는 작업의 ID 슬러그")
     p.add_argument("--branch", help="연결할 브랜치 (기본: 현재 브랜치)")
     p.add_argument("--no-branch", action="store_true")
+    p.add_argument("--parent", help="상위 작업 ID (한 단계만 허용)")
+    p.add_argument("--related", help="연관 작업 ID (쉼표 구분)")
+
+    p = sub.add_parser("relate", help="작업의 상위·연관 관계 변경")
+    p.add_argument("id")
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--parent", help="상위 작업 지정")
+    g.add_argument("--no-parent", action="store_true", help="상위 작업 해제")
+    p.add_argument("--add", help="연관 작업 추가 (쉼표 구분)")
+    p.add_argument("--remove", help="연관 작업 제거 (쉼표 구분)")
 
     p = sub.add_parser("link", help="작업에 브랜치 추가 연결")
     p.add_argument("id")
@@ -1289,7 +1397,7 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     handlers = {
         "where": cmd_where, "project-init": cmd_project_init, "new": cmd_new,
-        "link": cmd_link, "status": cmd_status, "close": cmd_close, "reopen": cmd_reopen,
+        "link": cmd_link, "relate": cmd_relate, "status": cmd_status, "close": cmd_close, "reopen": cmd_reopen,
         "list": cmd_list, "index": cmd_index, "hook": cmd_hook, "doctor": cmd_doctor,
     }
     kn_handlers = {

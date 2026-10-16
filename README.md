@@ -119,14 +119,20 @@ lang = "ko"
 - ID는 생성 후 바뀌지 않습니다. 브랜치가 바뀌면 `link`로 추가 연결합니다.
 - 브랜치 하나에는 진행 중(active/paused)인 작업 하나만 연결할 수 있습니다.
 
+### 상위 작업과 연관 작업
+
+- **상위 작업(`parent`)**: 여러 브랜치로 나뉘는 큰 흐름을 묶습니다. 큰 흐름은 브랜치 없는 작업으로 만들고, 각 브랜치 작업을 `--parent`로 그 아래에 둡니다. 계층은 한 단계만 허용합니다. 하위 작업 세션에는 상위 작업의 목표와 결정 제목이 함께 주입되므로, 브랜치가 달라도 흐름 전체의 결정을 이어받습니다.
+- **연관 작업(`related`)**: 후속 작업이나 참고할 이전 작업을 가리키는 단순 목록입니다. 주입하지 않고 ID만 표시합니다.
+
 ## CLI
 
 ```
 python bin/desk.py [--project KEY] [--cwd DIR] <command>
   where | list [--all] | index
   project-init KEY [--id-template T] [--shared a,b] [--lang ko]
-  new --title T [--branch B | --no-branch --slug S]
+  new --title T [--branch B | --no-branch --slug S] [--parent ID] [--related a,b]
   link ID [--branch B]
+  relate ID [--parent P | --no-parent] [--add a,b] [--remove a,b]
   status ID active|paused
   close ID done|abandoned [--note N]
   reopen ID

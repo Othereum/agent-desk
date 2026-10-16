@@ -16,7 +16,9 @@ python <desk.py> where                                # 현재 저장소·브랜
 python <desk.py> list [--all]                         # 작업 목록 (--all: 아카이브 포함)
 python <desk.py> new --title "제목"                    # 현재 브랜치로 작업 생성
 python <desk.py> new --title "제목" --no-branch --slug survey-x
+python <desk.py> new --title "제목" --parent <id> [--related a,b]   # 상위·연관 작업 지정
 python <desk.py> link <id> [--branch B]               # 작업에 브랜치 추가
+python <desk.py> relate <id> [--parent P | --no-parent] [--add a,b] [--remove a,b]
 python <desk.py> status <id> active|paused
 python <desk.py> close <id> done|abandoned [--note "..."]
 python <desk.py> reopen <id>
@@ -46,6 +48,14 @@ ID 생성, 브랜치 중복 검사, 상태 전환, 아카이브 이동은 반드
 - 그 외에는 만들지 않는다. 잠깐의 질문, 조사, 일회성 수정마다 작업을 만들면 기록이 소음이 된다.
 - 프로젝트가 등록되지 않았으면 `agent-desk:desk-init` 절차를 먼저 안내한다.
 
+## 상위 작업과 연관 작업
+
+- **상위 작업(`parent`)**: 여러 브랜치로 나뉘어 진행되는 큰 흐름(예: 여러 모듈의 독립화)을 묶는다. 상위 작업은 보통 브랜치 없는 작업(`--no-branch`)으로 만들고, 각 브랜치 작업을 `--parent`로 그 아래에 둔다. 계층은 한 단계만 허용된다.
+  - 하위 작업 세션에는 상위 작업의 목표와 결정 제목이 함께 주입된다. **상위 작업의 유효한 결정을 따른다.** 어긋나는 결정이 필요하면 사용자에게 확인한다.
+  - 흐름 전체에 걸친 결정은 상위 작업의 decisions.md에, 이 브랜치에만 해당하는 결정은 하위 작업의 decisions.md에 기록한다.
+  - 상위 작업의 state.md는 흐름 전체의 목표와 하위 작업들의 진행 상황을 짧게 유지한다. 하위 작업에서 단계가 끝나면 상위 작업의 "현재 상태"도 한 줄 갱신한다.
+- **연관 작업(`related`)**: 후속 작업, 같은 영역의 이전 작업 등 의미를 정하지 않은 참조 목록이다. 주입되지 않고 ID만 표시되므로, 필요할 때 `list --all`로 위치를 찾아 읽는다.
+
 ## 파일별 작성 규칙
 
 모든 파일은 UTF-8(BOM 없음), LF로 저장한다. 파일 편집은 Edit 도구로 직접 한다.
@@ -54,6 +64,7 @@ ID 생성, 브랜치 중복 검사, 상태 전환, 아카이브 이동은 반드
 - 세션 시작 시 이것만 읽어도 이어서 작업할 수 있게 쓴다. **60줄 이내**를 유지하고, 넘으면 지난 내용을 log.md로 옮긴다.
 - 섹션: 목표 / 현재 상태 / 다음 할 일 / 미해결 질문 / 핵심 파일(`경로:줄 — 역할`) / 관련 지식(`- K0012 제목`).
 - frontmatter의 `design_doc`에는 Claude Docs 설계 문서 URL을 둔다(아래 "문서 위치 기준").
+- frontmatter의 `parent`, `related`는 직접 고치지 말고 `relate` 명령으로 바꾼다(한 단계 제한과 ID 검증을 위해).
 - 갱신할 때 frontmatter의 `updated`를 오늘 날짜로 바꾼다. 내용을 코드와 대조해 확인했다면 `verified`도 바꾼다.
 - 커밋 해시는 적지 않는다(rebase로 바뀐다). 브랜치명과 커밋 메시지로 가리킨다.
 
