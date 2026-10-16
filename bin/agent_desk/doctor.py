@@ -24,7 +24,8 @@ DOCTOR_MARKER = ".last-doctor"
 DOCTOR_REMIND_DAYS = 7
 TASK_IDLE_DAYS = 30
 KN_FILE_RE = re.compile(r"^[KG]\d{4}(-[^/\\]*)?\.md$")
-REF_RE = re.compile(r"(?<![\w/.:-])((?:[\w.-]+/)+[\w.-]+\.\w+)(?::\d+)?")
+# extension is ASCII so a Korean particle right after a path ("hooks.py는") is not read as part of it
+REF_RE = re.compile(r"(?<![\w/.:-])((?:[\w.-]+/)+[\w.-]+\.[A-Za-z0-9]+)(?::\d+)?")
 
 
 def parse_when(value) -> float | None:
