@@ -13,7 +13,7 @@ from .core import (
     DEFAULT_ID_TEMPLATE, DEFAULT_SHARED_BRANCHES, DeskError, OPEN_STATUSES, TASK_FILES, desk_root,
     ensure_root, now_minute, today, write_text,
 )
-from .frontmatter import _format_value
+from .frontmatter import format_scalar, format_value
 from .gitinfo import repo_info
 from .model import (
     append_log, build_id, check_branch_free, children_of, current_project, find_task_by_branch, get_focus_id,
@@ -97,9 +97,9 @@ def cmd_new(args) -> None:
     task_id = build_id(project, branch, args.slug)
     tdir = project.dir / "tasks" / task_id
     values = {
-        "id": task_id, "title": args.title, "project": project.key,
-        "branches": _format_value([branch] if branch else []),
-        "parent": parent.id if parent else "", "related": _format_value(related),
+        "id": task_id, "title": format_scalar(args.title), "project": project.key,
+        "branches": format_value([branch] if branch else []),
+        "parent": parent.id if parent else "", "related": format_value(related),
         "date": today(), "datetime": now_minute(),
     }
     for name in TASK_FILES:
@@ -143,7 +143,7 @@ def cmd_relate(args) -> None:
     elif args.no_parent and task.meta.get("parent"):
         updates["parent"] = ""
         logs.append(f"상위 작업 해제: {task.meta['parent']}")
-    related = task_list_field(task, "related")
+    related = list(task_list_field(task, "related"))  # a copy: compared with the stored list below
     for r in split_csv(args.add):
         rid = get_task(project, r).id
         if rid.casefold() == task.id.casefold():
@@ -277,9 +277,9 @@ def cmd_kn_add(args) -> None:
             sources = [task.id]
     body = args.body or "<!-- 요약: 15줄 이내. 사실 하나만 담고, 근거가 되는 코드 위치(경로:줄)를 포함한다. -->"
     values = {
-        "id": entry_id, "title": args.title, "kind": args.kind,
-        "paths": _format_value(split_csv(args.paths)), "tags": _format_value(split_csv(args.tags)),
-        "sources": _format_value(sources), "location": args.location,
+        "id": entry_id, "title": format_scalar(args.title), "kind": args.kind,
+        "paths": format_value(split_csv(args.paths)), "tags": format_value(split_csv(args.tags)),
+        "sources": format_value(sources), "location": format_scalar(args.location),
         "date": today(), "verified": now_minute(), "body": body,
     }
     name = f"{entry_id}-{sanitize(args.slug)}.md" if args.slug else f"{entry_id}.md"

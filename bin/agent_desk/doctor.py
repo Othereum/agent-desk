@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 from .core import DeskError, OPEN_STATUSES, read_text
-from .frontmatter import parse_frontmatter
+from .frontmatter import frontmatter_comments
 from .gitinfo import git, repo_info
 from .model import Project, load_tasks, match_project, stray_files
 from .knowledge import Entry, glob_regex, kn_dir, load_entries
@@ -98,6 +98,12 @@ def missing_refs(e: Entry, top: Path) -> list[str]:
     return sorted(r for r in refs if not (top / r).exists())
 
 
+def title_comment_issue(path: Path, comment: str) -> dict:
+    # before 0.3.4 titles were written unquoted, so "PR #12" now reads as "PR" plus a comment
+    return {"level": "warn", "kind": "frontmatter-title-comment", "target": path.as_posix(),
+            "message": f"title 줄의 `{comment.strip()}` 부분이 주석으로 읽힌다. 제목의 일부라면 title 값을 따옴표로 감쌀 것"}
+
+
 def doctor_knowledge(root: Path, project: Project | None, top: Path | None,
                      min_commits: int, issues: list) -> None:
     base = kn_dir(root, project)
@@ -112,10 +118,13 @@ def doctor_knowledge(root: Path, project: Project | None, top: Path | None,
                            "message": "knowledge 폴더에 형식이 맞지 않는 파일(동기화 충돌 사본일 수 있음)"})
             continue
         try:
-            parse_frontmatter(read_text(p))
+            comments = frontmatter_comments(read_text(p))
         except DeskError as err:
             issues.append({"level": "warn", "kind": "frontmatter", "target": p.as_posix(),
                            "message": f"frontmatter를 읽을 수 없음({err})"})
+            continue
+        if "title" in comments:
+            issues.append(title_comment_issue(p, comments["title"]))
     entries = load_entries(root, project)
     seen: dict[str, str] = {}
     for e in entries:
@@ -161,8 +170,11 @@ def doctor_tasks(project: Project, top: Path | None, issues: list) -> None:
     for t in load_tasks(project, include_archive=True):
         if t.status == "?":
             issues.append({"level": "warn", "kind": "frontmatter", "target": t.state_path.as_posix(),
-                           "message": "state.md frontmatter를 읽을 수 없음"})
+                           "message": f"state.md frontmatter를 읽을 수 없음({t.meta.get('error', '')})"})
             continue
+        comments = frontmatter_comments(read_text(t.state_path))
+        if "title" in comments:
+            issues.append(title_comment_issue(t.state_path, comments["title"]))
         strays = stray_files(t)
         if strays:
             issues.append({"level": "warn", "kind": "stray-file", "target": t.dir.as_posix(),

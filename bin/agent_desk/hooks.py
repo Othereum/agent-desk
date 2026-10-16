@@ -12,6 +12,7 @@ import tomllib
 from pathlib import Path
 
 from .core import DeskError, OPEN_STATUSES, PLUGIN_ROOT, desk_root, read_text
+from .frontmatter import parse_frontmatter
 from .gitinfo import RepoInfo, git, normalize_path, repo_info
 from .model import (
     Project, Task, get_focus_task, get_task, head_branch, load_tasks, match_project, projects_dir,
@@ -51,7 +52,8 @@ def session_start_context(payload: dict) -> str | None:
             more = f" 외 {len(branchless) - 5}건" if len(branchless) > 5 else ""
             lines.append(f"진행 중인 브랜치 없는 작업: {listed}{more}. 이어서 할 작업이면 사용자에게 확인하고 "
                          "`desk focus <id>` 로 포커스를 지정할 것.")
-        return "\n".join(lines + ["작업 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다."])
+        return "\n".join(lines + broken_task_lines(project) +
+                         ["작업 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다."])
     design_doc = task.meta.get("design_doc")
     label = "" if source == "branch" else " · 포커스"
     parts = [f"{head} · 작업 {task.id} ({task.status}{label})",
@@ -78,10 +80,19 @@ def session_start_context(payload: dict) -> str | None:
     strays = stray_files(task)
     if strays:
         parts += ["", f"경고: 작업 폴더에 예상하지 않은 파일이 있습니다(동기화 충돌 사본일 수 있음): {', '.join(strays)}. 사용자에게 알리고 병합 여부를 확인할 것."]
+    broken = broken_task_lines(project)
+    if broken:
+        parts += [""] + broken
     if payload.get("source") == "compact":
         parts += ["", "컨텍스트가 방금 압축되었다. 압축 전 진행 내용과 결정이 state.md·decisions.md·log.md에 반영되어 있는지 확인하고, 빠진 내용이 있으면 지금 기록할 것."]
     parts += ["", "위 기록은 확인할 출발점이다. 코드와 다를 수 있으니 의존하기 전에 검증하고, 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다."]
     return "\n".join(parts)
+
+
+def broken_task_lines(project: Project) -> list[str]:
+    broken = [t for t in load_tasks(project) if t.status == "?"]
+    return [f"경고: state.md frontmatter를 읽을 수 없어 작업 목록에서 빠진 작업이 있다: {t.id} ({t.meta.get('error', '')}). "
+            "사용자에게 알리고 고칠 것." for t in broken]
 
 
 def parent_context(project: Project, task: Task) -> list[str]:
@@ -248,6 +259,21 @@ def kn_hook_index(root: Path, project: Project) -> list[dict]:
     return entries
 
 
+def desk_file_check(root: Path, path: Path) -> str | None:
+    """For an edit of a record file in the data root: "" when its frontmatter reads fine, the
+    error to inject otherwise. None for any other file."""
+    is_record = path.name == "state.md" or (path.parent.name == "knowledge" and path.suffix == ".md"
+                                            and path.name != "index.md")
+    if not is_record or not normalize_path(path).startswith(normalize_path(root) + "/"):
+        return None
+    try:
+        parse_frontmatter(read_text(path))
+    except (DeskError, OSError) as e:
+        return (f"[agent-desk] 방금 수정한 {path.as_posix()} 의 frontmatter를 읽을 수 없다: {e}. "
+                "agent-desk:desk 스킬의 frontmatter 형식에 맞게 고칠 것.")
+    return ""
+
+
 def post_tool_use_context(payload: dict) -> str | None:
     root = desk_root()
     if not (root / "projects").is_dir():
@@ -259,6 +285,10 @@ def post_tool_use_context(payload: dict) -> str | None:
     path = Path(file_path)
     if not path.is_absolute():
         path = Path(payload.get("cwd") or os.getcwd()) / path
+    if payload.get("tool_name") in ("Edit", "Write", "MultiEdit"):
+        checked = desk_file_check(root, path)
+        if checked is not None:
+            return checked or None
     top = find_toplevel(path.parent)
     if not top:
         return None

@@ -151,8 +151,8 @@ def load_tasks(project: Project, include_archive: bool = False) -> list[Task]:
                 continue
             try:
                 meta = parse_frontmatter(read_text(state))
-            except DeskError:
-                meta = {"status": "?", "title": "(frontmatter 오류)"}
+            except DeskError as err:
+                meta = {"status": "?", "title": "(frontmatter 오류)", "error": str(err)}
             tasks.append(Task(d.name, d, meta, archived))
     return tasks
 

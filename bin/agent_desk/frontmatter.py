@@ -1,4 +1,14 @@
-"""Frontmatter of state.md and knowledge entries."""
+"""Frontmatter of state.md and knowledge entries.
+
+A defined subset of YAML, read strictly so a file is never silently misread:
+- `key: value` at column 0. Values are strings: plain, "double-quoted" (\\ \" \n \t escapes)
+  or 'single-quoted' ('' escapes). An empty value is "".
+- Lists: flow `[a, "b, c"]`, or block items under an empty `key:` (`  - item`).
+- Comments: a line starting with `#`, or `#` after whitespace outside quotes (standard YAML).
+Anything else (nested maps, block scalars `|` `>`, anchors, flow maps, duplicate keys) is
+an error. Writes quote values that would be ambiguous and replace only the lines of the keys
+being updated, so comments and block lists elsewhere survive.
+"""
 
 from __future__ import annotations
 
@@ -6,33 +16,11 @@ import re
 
 from .core import DeskError
 
-
-# Restricted YAML subset: `key: value` and flow lists `[a, "b, c"]`.
-
-def _parse_list(raw: str) -> list[str]:
-    items, buf, quoted, i = [], "", False, 0
-    body = raw.strip()[1:-1]
-    while i < len(body):
-        c = body[i]
-        if c == '"':
-            quoted = not quoted
-        elif c == "," and not quoted:
-            items.append(buf.strip())
-            buf = ""
-        else:
-            buf += c
-        i += 1
-    if buf.strip():
-        items.append(buf.strip())
-    return [x for x in items if x]
-
-
-def _format_value(value) -> str:
-    if isinstance(value, list):
-        def q(s: str) -> str:
-            return f'"{s}"' if any(ch in s for ch in ',[]"') else s
-        return "[" + ", ".join(q(str(v).replace('"', "'")) for v in value) + "]"
-    return str(value)
+_KEY = re.compile(r"([A-Za-z_][\w.-]*):(?=\s|$)(.*)$")
+_ITEM = re.compile(r"(\s*-)(?:\s+(.*))?$")
+_PLAIN_BAD_START = set("-?:,[]{}#&*!|>'\"%@`")
+_UNSUPPORTED_START = set("{&*!|>%@`")
+_ESCAPES = {"\\": "\\", '"': '"', "n": "\n", "t": "\t", "/": "/", "0": "\0"}
 
 
 def split_frontmatter(text: str) -> tuple[list[str], str]:
@@ -45,28 +33,182 @@ def split_frontmatter(text: str) -> tuple[list[str], str]:
     raise DeskError("frontmatter가 닫히지 않았습니다")
 
 
-def parse_frontmatter(text: str) -> dict:
-    fm_lines, _ = split_frontmatter(text)
-    data = {}
-    for line in fm_lines:
-        if ":" not in line or line.lstrip().startswith("#"):
+# ---------------------------------------------------------------- read
+
+def _quoted(s: str, i: int) -> tuple[str, int]:
+    """The quoted string starting at s[i]; returns (value, index after the closing quote)."""
+    q, out, i = s[i], [], i + 1
+    while i < len(s):
+        c = s[i]
+        if q == "'" and c == "'":
+            if s[i + 1:i + 2] == "'":
+                out.append("'")
+                i += 2
+                continue
+            return "".join(out), i + 1
+        if q == '"' and c == "\\":
+            esc = s[i + 1:i + 2]
+            if esc not in _ESCAPES:
+                raise ValueError(f"지원하지 않는 이스케이프 \\{esc}")
+            out.append(_ESCAPES[esc])
+            i += 2
             continue
-        key, _, raw = line.partition(":")
-        # an inline comment needs two spaces before `#`, so a title like "PR #12" survives
-        raw = re.split(r"\s{2,}#", raw, maxsplit=1)[0].strip()
-        data[key.strip()] = _parse_list(raw) if raw.startswith("[") and raw.endswith("]") else raw
-    return data
+        if q == '"' and c == '"':
+            return "".join(out), i + 1
+        out.append(c)
+        i += 1
+    raise ValueError("따옴표가 닫히지 않았습니다")
+
+
+def _plain_end(s: str, i: int, stops: str = "") -> int:
+    """End of a plain scalar starting at s[i]: a comment (`#` after whitespace) or a stop char."""
+    j = i
+    while j < len(s):
+        if s[j] in stops or (s[j] == "#" and j > 0 and s[j - 1] in " \t"):
+            break
+        j += 1
+    return j
+
+
+def _scalar(s: str, i: int, stops: str = "") -> tuple[str, int]:
+    """A scalar starting at s[i] (after leading space); returns (value, end index)."""
+    if i >= len(s):
+        return "", i
+    c = s[i]
+    if c in "\"'":
+        return _quoted(s, i)
+    if c in _UNSUPPORTED_START or (stops and c in "[{"):
+        raise ValueError(f"지원하지 않는 YAML 문법({c})")
+    value = s[i:_plain_end(s, i, stops)].rstrip()
+    return value, i + len(value)
+
+
+def _flow_list(s: str, i: int) -> tuple[list[str], int]:
+    """A flow list starting at s[i] == '['; returns (items, index after ']')."""
+    items, i = [], i + 1
+    while True:
+        while i < len(s) and s[i] in " \t":
+            i += 1
+        if i >= len(s):
+            raise ValueError("목록의 ]가 없습니다")
+        if s[i] == "]":
+            return items, i + 1
+        value, i = _scalar(s, i, stops=",[]{}")
+        while i < len(s) and s[i] in " \t":
+            i += 1
+        if i < len(s) and s[i] == ",":
+            items.append(value)
+            i += 1
+        elif i < len(s) and s[i] == "]":
+            items.append(value)
+            return items, i + 1
+        else:
+            raise ValueError("목록 항목 사이에는 쉼표가 필요합니다")
+
+
+def _value(raw: str) -> tuple[str | list[str], str]:
+    """The value after `key:`; returns (value, trailing comment)."""
+    i = len(raw) - len(raw.lstrip(" \t"))
+    if i >= len(raw) or raw[i] == "#":
+        return "", raw.rstrip()
+    if raw[i] == "[":
+        value, end = _flow_list(raw, i)
+    elif raw[i] == "-" and raw[i + 1:i + 2] in ("", " ", "\t"):
+        raise ValueError("목록은 다음 줄부터 `  - 항목`으로 쓰거나 [a, b] 로 쓸 것")
+    else:
+        value, end = _scalar(raw, i)
+    rest = raw[end:]
+    if rest.strip():
+        if not rest.lstrip().startswith("#") or rest[:1] not in (" ", "\t"):
+            raise ValueError(f"값 뒤에 알 수 없는 내용: {rest.strip()}")
+    return value, rest.rstrip()
+
+
+def _parse(fm_lines: list[str]) -> tuple[dict, dict]:
+    """Returns (data, spans). spans[key]: start/end line indexes (end exclusive), kind
+    (scalar | flow | block), the key line's trailing comment, block item indent and lines."""
+    data, spans, key = {}, {}, None
+    for n, line in enumerate(fm_lines):
+        try:
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            item = _ITEM.match(line)
+            if item and key and spans[key]["kind"] in ("empty", "block"):
+                sp = spans[key]
+                value, comment = _value(item.group(2) or "")
+                if isinstance(value, list):
+                    raise ValueError("중첩 목록은 지원하지 않습니다")
+                if item.group(2) and item.group(2)[0] not in "\"'" and re.search(r":(\s|$)", value):
+                    raise ValueError("목록 항목 안의 `key: value`(중첩 구조)는 지원하지 않습니다. 문자열이면 따옴표로 감쌀 것")
+                if sp["kind"] == "empty":
+                    sp["kind"], sp["indent"], data[key] = "block", item.group(1), []
+                data[key].append(value)
+                sp["items"].append((value, line))
+                sp["end"] = n + 1
+                continue
+            m = _KEY.match(line)
+            if not m:
+                raise ValueError("`key: value` 형식이 아닙니다(들여쓰기·중첩 구조는 지원하지 않음)")
+            key = m.group(1)
+            if key in data:
+                raise ValueError(f"키 중복: {key}")
+            value, comment = _value(m.group(2))
+            empty = value == "" and not m.group(2).split("#")[0].strip()
+            kind = "flow" if isinstance(value, list) else "empty" if empty else "scalar"
+            data[key] = value
+            spans[key] = {"start": n, "end": n + 1, "kind": kind, "comment": comment,
+                          "indent": "  -", "items": []}
+        except ValueError as e:
+            raise DeskError(f"frontmatter {n + 2}번째 줄: {e}: {line.strip()}") from None
+    return data, spans
+
+
+def parse_frontmatter(text: str) -> dict:
+    return _parse(split_frontmatter(text)[0])[0]
+
+
+def frontmatter_comments(text: str) -> dict[str, str]:
+    """Trailing comments of key lines, e.g. for spotting a title cut at ` #` by an older writer."""
+    return {k: sp["comment"] for k, sp in _parse(split_frontmatter(text)[0])[1].items() if sp["comment"]}
+
+
+# ---------------------------------------------------------------- write
+
+def _quote(s: str) -> str:
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t") + '"'
+
+
+def format_scalar(value, in_flow: bool = False) -> str:
+    s = str(value)
+    if not s:
+        return '""' if in_flow else ""
+    plain = (s == s.strip() and s[0] not in _PLAIN_BAD_START and ": " not in s and " #" not in s
+             and not s.endswith(":") and all(c >= " " for c in s)
+             and not (in_flow and any(c in s for c in ",[]{}")))
+    return s if plain else _quote(s)
+
+
+def format_value(value) -> str:
+    if isinstance(value, list):
+        return "[" + ", ".join(format_scalar(v, in_flow=True) for v in value) + "]"
+    return format_scalar(value)
 
 
 def update_frontmatter(text: str, updates: dict) -> str:
     fm_lines, body = split_frontmatter(text)
-    pending = dict(updates)
-    out = []
-    for line in fm_lines:
-        key = line.partition(":")[0].strip()
-        if key in pending:
-            out.append(f"{key}: {_format_value(pending.pop(key))}".rstrip())
+    _, spans = _parse(fm_lines)
+    out = list(fm_lines)
+    for key in sorted((k for k in updates if k in spans), key=lambda k: spans[k]["start"], reverse=True):
+        sp, value = spans[key], updates[key]
+        if isinstance(value, list) and sp["kind"] == "block" and value:
+            # keep the block form and each kept item's own line (with its comment)
+            old = list(sp["items"])
+            lines = [fm_lines[sp["start"]]]
+            for v in value:
+                hit = next((i for i, (ov, _) in enumerate(old) if ov == str(v)), None)
+                lines.append(old.pop(hit)[1] if hit is not None else f"{sp['indent']} {format_scalar(v)}")
         else:
-            out.append(line)
-    out.extend(f"{k}: {_format_value(v)}".rstrip() for k, v in pending.items())
+            lines = [f"{key}: {format_value(value)}".rstrip() + sp["comment"]]
+        out[sp["start"]:sp["end"]] = lines
+    out.extend(f"{k}: {format_value(v)}".rstrip() for k, v in updates.items() if k not in spans)
     return "---\n" + "\n".join(out) + "\n---\n" + body

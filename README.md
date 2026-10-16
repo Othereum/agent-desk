@@ -161,6 +161,7 @@ _함정 · 원인 · 방법_`"]
 - [`kn`](skills/kn/SKILL.md): knowledge 형식, 기록·수정 규칙, doctor
 - [`desk-new`](skills/desk-new/SKILL.md) · [`desk-close`](skills/desk-close/SKILL.md) · [`desk-init`](skills/desk-init/SKILL.md): 절차
 - CLI: `python bin/desk.py --help`
+- 테스트: `python -m unittest discover -s tests`
 
 ## 라이선스
 
