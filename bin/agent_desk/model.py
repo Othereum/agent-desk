@@ -161,7 +161,7 @@ def get_task(project: Project, task_id: str) -> Task:
     for t in load_tasks(project, include_archive=True):
         if t.id.casefold() == task_id.casefold():
             return t
-    raise DeskError(f"작업을 찾을 수 없습니다: {project.key}/{task_id}")
+    raise DeskError(f"태스크를 찾을 수 없습니다: {project.key}/{task_id}")
 
 
 def find_task_by_branch(project: Project, branch: str) -> Task | None:
@@ -189,7 +189,7 @@ def build_id(project: Project, branch: str | None, slug: str | None) -> str:
             yymmdd=d.strftime("%y%m%d"), yyyymmdd=d.strftime("%Y%m%d"))
     else:
         if not slug:
-            raise DeskError("브랜치 없이 만드는 작업에는 --slug 가 필요합니다")
+            raise DeskError("브랜치 없이 만드는 태스크에는 --slug 가 필요합니다")
         raw = f"{d.strftime('%y%m%d')}-{slug}"
     base = sanitize(raw)
     taken = {t.id.casefold() for t in load_tasks(project, include_archive=True)}
@@ -203,15 +203,15 @@ def build_id(project: Project, branch: str | None, slug: str | None) -> str:
 
 def check_branch_free(project: Project, branch: str, task_id: str | None = None) -> None:
     if project.is_shared(branch):
-        raise DeskError(f"공용 브랜치는 작업에 연결할 수 없습니다: {branch}")
+        raise DeskError(f"공용 브랜치는 태스크에 연결할 수 없습니다: {branch}")
     # an unreadable state.md hides its branches, so this branch may already be taken
     broken = [t.id for t in load_tasks(project) if t.status == "?"]
     if broken:
-        raise DeskError(f"state.md frontmatter를 읽을 수 없는 작업이 있어 브랜치 중복을 확인할 수 없습니다: "
+        raise DeskError(f"state.md frontmatter를 읽을 수 없는 태스크가 있어 브랜치 중복을 확인할 수 없습니다: "
                         f"{', '.join(broken)}. 먼저 고치세요(doctor로 위치 확인)")
     owner = find_task_by_branch(project, branch)
     if owner and (task_id is None or owner.id.casefold() != task_id.casefold()):
-        raise DeskError(f"브랜치 {branch} 는 이미 진행 중인 작업 {owner.id} 에 연결되어 있습니다")
+        raise DeskError(f"브랜치 {branch} 는 이미 진행 중인 태스크 {owner.id} 에 연결되어 있습니다")
 
 
 def render_template(lang: str, name: str, values: dict) -> str:
@@ -256,9 +256,9 @@ def children_of(project: Project, task_id: str, open_only: bool = False) -> list
 def resolve_parent(project: Project, parent_id: str, child_id: str | None = None) -> Task:
     parent = get_task(project, parent_id)
     if child_id and parent.id.casefold() == child_id.casefold():
-        raise DeskError("자기 자신을 상위 작업으로 지정할 수 없습니다")
+        raise DeskError("자기 자신을 상위 태스크로 지정할 수 없습니다")
     if parent.meta.get("parent"):
-        raise DeskError(f"상위 작업은 한 단계만 둘 수 있습니다: {parent.id} 는 이미 {parent.meta['parent']} 의 하위 작업입니다")
+        raise DeskError(f"상위 태스크는 한 단계만 둘 수 있습니다: {parent.id} 는 이미 {parent.meta['parent']} 의 하위 태스크입니다")
     return parent
 
 

@@ -122,7 +122,7 @@ def cmd_focus(args) -> None:
     elif args.id:
         task = get_task(project, args.id)
         if task.archived or task.status not in OPEN_STATUSES:
-            raise DeskError(f"진행 중인 작업만 포커스할 수 있습니다: {task.id} ({task.status})")
+            raise DeskError(f"진행 중인 태스크만 포커스할 수 있습니다: {task.id} ({task.status})")
         set_focus(project, task.id)
     focus = get_focus_task(project)
     out({"project": project.key, "focus": focus.id if focus else None,
@@ -136,26 +136,26 @@ def cmd_relate(args) -> None:
     updates, logs = {}, []
     if args.parent:
         if children_of(project, task.id):
-            raise DeskError(f"{task.id} 에 하위 작업이 있어 상위 작업을 지정할 수 없습니다(한 단계만 허용)")
+            raise DeskError(f"{task.id} 에 하위 태스크가 있어 상위 태스크를 지정할 수 없습니다(한 단계만 허용)")
         parent = resolve_parent(project, args.parent, task.id)
         updates["parent"] = parent.id
-        logs.append(f"상위 작업 지정: {parent.id}")
+        logs.append(f"상위 태스크 지정: {parent.id}")
     elif args.no_parent and task.meta.get("parent"):
         updates["parent"] = ""
-        logs.append(f"상위 작업 해제: {task.meta['parent']}")
+        logs.append(f"상위 태스크 해제: {task.meta['parent']}")
     related = list(task_list_field(task, "related"))  # a copy: compared with the stored list below
     for r in split_csv(args.add):
         rid = get_task(project, r).id
         if rid.casefold() == task.id.casefold():
-            raise DeskError("자기 자신을 연관 작업으로 지정할 수 없습니다")
+            raise DeskError("자기 자신을 연관 태스크로 지정할 수 없습니다")
         if rid.casefold() not in (x.casefold() for x in related):
             related.append(rid)
-            logs.append(f"연관 작업 추가: {rid}")
+            logs.append(f"연관 태스크 추가: {rid}")
     for r in split_csv(args.remove):
         kept = [x for x in related if x.casefold() != r.casefold()]
         if len(kept) != len(related):
             related = kept
-            logs.append(f"연관 작업 제거: {r}")
+            logs.append(f"연관 태스크 제거: {r}")
     if related != task_list_field(task, "related"):
         updates["related"] = related
     if updates:
@@ -171,7 +171,7 @@ def cmd_link(args) -> None:
     project, info = current_project(root, Path(args.cwd), args.project)
     task = get_task(project, args.id)
     if task.archived:
-        raise DeskError("아카이브된 작업에는 브랜치를 연결할 수 없습니다")
+        raise DeskError("아카이브된 태스크에는 브랜치를 연결할 수 없습니다")
     branch = args.branch or info.branch
     if not branch:
         raise DeskError("연결할 브랜치를 알 수 없습니다")
@@ -190,7 +190,7 @@ def cmd_status(args) -> None:
     project, _ = current_project(root, Path(args.cwd), args.project)
     task = get_task(project, args.id)
     if task.archived:
-        raise DeskError("아카이브된 작업입니다. adesk reopen 을 사용하세요")
+        raise DeskError("아카이브된 태스크입니다. adesk reopen 을 사용하세요")
     if args.status == "active":
         for b in task.branches:
             check_branch_free(project, b, task.id)
@@ -206,12 +206,12 @@ def cmd_close(args) -> None:
     project, _ = current_project(root, Path(args.cwd), args.project)
     task = get_task(project, args.id)
     if task.archived:
-        raise DeskError("이미 아카이브된 작업입니다")
+        raise DeskError("이미 아카이브된 태스크입니다")
     dest = project.dir / "archive" / task.id
     if dest.exists():
         raise DeskError(f"아카이브에 같은 ID가 이미 있습니다: {dest}")
     set_meta(task, {"status": args.result})
-    append_log(task, [f"작업 종료: {args.result}"] + ([args.note] if args.note else []))
+    append_log(task, [f"태스크 종료: {args.result}"] + ([args.note] if args.note else []))
     dest.parent.mkdir(parents=True, exist_ok=True)
     import shutil
     shutil.move(str(task.dir), str(dest))
@@ -221,7 +221,7 @@ def cmd_close(args) -> None:
     write_index(project)
     open_children = [t.id for t in children_of(project, task.id, open_only=True)]
     out({"task": task.id, "status": args.result, "dir": str(dest), "unfocused": unfocused,
-         **({"warning": f"진행 중인 하위 작업이 남아 있습니다: {', '.join(open_children)}"} if open_children else {})})
+         **({"warning": f"진행 중인 하위 태스크가 남아 있습니다: {', '.join(open_children)}"} if open_children else {})})
 
 
 def cmd_reopen(args) -> None:
@@ -229,7 +229,7 @@ def cmd_reopen(args) -> None:
     project, _ = current_project(root, Path(args.cwd), args.project)
     task = get_task(project, args.id)
     if not task.archived:
-        raise DeskError("아카이브된 작업이 아닙니다")
+        raise DeskError("아카이브된 태스크가 아닙니다")
     for b in task.branches:
         check_branch_free(project, b, task.id)
     dest = project.dir / "tasks" / task.id
@@ -237,7 +237,7 @@ def cmd_reopen(args) -> None:
     shutil.move(str(task.dir), str(dest))
     task.dir, task.archived = dest, False
     set_meta(task, {"status": "active"})
-    append_log(task, ["작업 재개"])
+    append_log(task, ["태스크 재개"])
     write_index(project)
     out({"task": task.id, "status": "active", "dir": str(dest)})
 
@@ -412,7 +412,7 @@ def cmd_doctor(args) -> None:
     focus_id = get_focus_id(project)
     if focus_id and not get_focus_task(project):
         issues.append({"level": "info", "kind": "focus-stale", "id": focus_id,
-                       "message": "포커스가 종료되었거나 없는 작업을 가리킴. `focus --clear` 또는 다른 작업으로 지정"})
+                       "message": "포커스가 종료되었거나 없는 태스크를 가리킴. `focus --clear` 또는 다른 태스크로 지정"})
     doctor_knowledge(root, project, top, args.min_commits, issues)
     doctor_knowledge(root, None, None, args.min_commits, issues)
 
@@ -441,7 +441,7 @@ def run(argv: list[str]) -> int:
     ap.add_argument("--project", help="프로젝트 key (기본: 현재 저장소로 자동 판별)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("where", help="현재 저장소·브랜치의 프로젝트와 작업 확인")
+    sub.add_parser("where", help="현재 저장소·브랜치의 프로젝트와 태스크 확인")
 
     p = sub.add_parser("project-init", help="현재 저장소를 프로젝트로 등록")
     p.add_argument("key")
@@ -449,47 +449,47 @@ def run(argv: list[str]) -> int:
     p.add_argument("--shared", help="공용 브랜치 목록 (쉼표 구분)")
     p.add_argument("--lang", default="ko")
 
-    p = sub.add_parser("new", help="작업 생성")
+    p = sub.add_parser("new", help="태스크 생성")
     p.add_argument("--title", required=True)
-    p.add_argument("--slug", help="브랜치 없는 작업의 ID 슬러그")
+    p.add_argument("--slug", help="브랜치 없는 태스크의 ID 슬러그")
     p.add_argument("--branch", help="연결할 브랜치 (기본: 현재 브랜치)")
     p.add_argument("--no-branch", action="store_true")
-    p.add_argument("--parent", help="상위 작업 ID (한 단계만 허용)")
-    p.add_argument("--related", help="연관 작업 ID (쉼표 구분)")
-    p.add_argument("--no-focus", action="store_true", help="브랜치 없는 작업을 만들어도 포커스로 지정하지 않음")
+    p.add_argument("--parent", help="상위 태스크 ID (한 단계만 허용)")
+    p.add_argument("--related", help="연관 태스크 ID (쉼표 구분)")
+    p.add_argument("--no-focus", action="store_true", help="브랜치 없는 태스크를 만들어도 포커스로 지정하지 않음")
 
-    p = sub.add_parser("focus", help="포커스 작업 조회·지정·해제 (브랜치에 연결된 작업이 없을 때 쓰는 작업)")
+    p = sub.add_parser("focus", help="포커스 태스크 조회·지정·해제 (브랜치에 연결된 태스크가 없을 때 쓰는 태스크)")
     p.add_argument("id", nargs="?")
     p.add_argument("--clear", action="store_true")
 
-    p = sub.add_parser("relate", help="작업의 상위·연관 관계 변경")
+    p = sub.add_parser("relate", help="태스크의 상위·연관 관계 변경")
     p.add_argument("id")
     g = p.add_mutually_exclusive_group()
-    g.add_argument("--parent", help="상위 작업 지정")
-    g.add_argument("--no-parent", action="store_true", help="상위 작업 해제")
-    p.add_argument("--add", help="연관 작업 추가 (쉼표 구분)")
-    p.add_argument("--remove", help="연관 작업 제거 (쉼표 구분)")
+    g.add_argument("--parent", help="상위 태스크 지정")
+    g.add_argument("--no-parent", action="store_true", help="상위 태스크 해제")
+    p.add_argument("--add", help="연관 태스크 추가 (쉼표 구분)")
+    p.add_argument("--remove", help="연관 태스크 제거 (쉼표 구분)")
 
-    p = sub.add_parser("link", help="작업에 브랜치 추가 연결")
+    p = sub.add_parser("link", help="태스크에 브랜치 추가 연결")
     p.add_argument("id")
     p.add_argument("--branch")
 
-    p = sub.add_parser("status", help="작업 상태 변경 (active/paused)")
+    p = sub.add_parser("status", help="태스크 상태 변경 (active/paused)")
     p.add_argument("id")
     p.add_argument("status", choices=OPEN_STATUSES)
 
-    p = sub.add_parser("close", help="작업 종료 후 아카이브")
+    p = sub.add_parser("close", help="태스크 종료 후 아카이브")
     p.add_argument("id")
     p.add_argument("result", choices=("done", "abandoned"))
     p.add_argument("--note")
 
-    p = sub.add_parser("reopen", help="아카이브된 작업 재개")
+    p = sub.add_parser("reopen", help="아카이브된 태스크 재개")
     p.add_argument("id")
 
-    p = sub.add_parser("list", help="작업 목록")
+    p = sub.add_parser("list", help="태스크 목록")
     p.add_argument("--all", action="store_true", help="아카이브 포함")
 
-    sub.add_parser("index", help="작업·knowledge index.md 재생성")
+    sub.add_parser("index", help="태스크·knowledge index.md 재생성")
 
     kn = sub.add_parser("kn", help="knowledge 항목 관리").add_subparsers(dest="kn_cmd", required=True)
     p = kn.add_parser("add", help="항목 추가")
@@ -497,7 +497,7 @@ def run(argv: list[str]) -> int:
     p.add_argument("--kind", required=True, choices=KN_KINDS)
     p.add_argument("--paths", help="관련 경로 glob (저장소 기준, 쉼표 구분)")
     p.add_argument("--tags", help="태그 (쉼표 구분)")
-    p.add_argument("--sources", help="출처 작업 ID (기본: 현재 브랜치의 작업, 없으면 포커스 작업)")
+    p.add_argument("--sources", help="출처 태스크 ID (기본: 현재 브랜치의 태스크, 없으면 포커스 태스크)")
     p.add_argument("--location", default="inline", help="inline | repo:<경로> | claude-docs:<url>")
     p.add_argument("--slug", help="파일명용 영문 슬러그")
     p.add_argument("--body", help="본문 (생략 시 안내 주석만 넣고 이후 직접 편집)")
@@ -524,7 +524,7 @@ def run(argv: list[str]) -> int:
     p.add_argument("id")
     p.add_argument("--reason", help="재확인이 필요한 이유")
 
-    p = sub.add_parser("doctor", help="저장소 상태 점검 (낡은 knowledge, 충돌 사본, 방치된 작업)")
+    p = sub.add_parser("doctor", help="저장소 상태 점검 (낡은 knowledge, 충돌 사본, 방치된 태스크)")
     p.add_argument("--apply", action="store_true", help="낡은 것으로 판단된 valid 항목을 stale로 표시")
     p.add_argument("--min-commits", type=int, default=3, help="확인 이후 이 수 이상의 커밋이 paths를 바꾸면 낡은 것으로 판단")
 

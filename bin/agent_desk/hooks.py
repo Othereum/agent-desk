@@ -46,27 +46,27 @@ def session_start_context(payload: dict) -> str | None:
     task, source = resolve_session_task(project, branch)
     if not task:
         # an unreadable task may be this branch's: say so before anything suggests a new task
-        lines = ([f"{head} · 연결된 작업 없음."] + broken_task_lines(project) +
+        lines = ([f"{head} · 연결된 태스크 없음."] + broken_task_lines(project) +
                  [cli] + ([kn_line] if kn_line else []))
         branchless = [t for t in load_tasks(project) if t.status in OPEN_STATUSES and not t.branches]
         if branchless:
             listed = ", ".join(f"{t.id}({t.meta.get('title', '')})" for t in branchless[:5])
             more = f" 외 {len(branchless) - 5}건" if len(branchless) > 5 else ""
-            lines.append(f"진행 중인 브랜치 없는 작업: {listed}{more}. 이어서 할 작업이면 사용자에게 확인하고 "
+            lines.append(f"진행 중인 브랜치 없는 태스크: {listed}{more}. 이어서 할 태스크면 사용자에게 확인하고 "
                          "`adesk focus <id>` 로 포커스를 지정할 것.")
-        return "\n".join(lines + ["작업 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다."])
+        return "\n".join(lines + ["태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다."])
     design_doc = task.meta.get("design_doc")
     label = "" if source == "branch" else " · 포커스"
-    parts = [f"{head} · 작업 {task.id} ({task.status}{label})",
-             f"작업 폴더: {task.dir.as_posix()}"] + ([f"설계 문서: {design_doc}"] if design_doc else []) + [
+    parts = [f"{head} · 태스크 {task.id} ({task.status}{label})",
+             f"태스크 폴더: {task.dir.as_posix()}"] + ([f"설계 문서: {design_doc}"] if design_doc else []) + [
              cli] + ([kn_line] if kn_line else [])
     if source == "focus" and branch and not project.is_shared(branch):
-        parts.append(f"이 브랜치({branch})에는 연결된 작업이 없어 포커스 작업을 표시한다. 이 브랜치의 일과 관계없을 수 있으니 "
-                     "관련이 없으면 사용자에게 확인하고 새 작업을 만들거나 `link` 로 연결할 것.")
+        parts.append(f"이 브랜치({branch})에는 연결된 태스크가 없어 포커스 태스크를 표시한다. 이 브랜치의 일과 관계없을 수 있으니 "
+                     "관련이 없으면 사용자에게 확인하고 새 태스크를 만들거나 `link` 로 연결할 것.")
     if source == "branch":
         focus = get_focus_task(project)
         if focus and focus.id != task.id and focus.id != (task.meta.get("parent") or ""):
-            parts.append(f"포커스 작업은 {focus.id}({focus.meta.get('title', '')})로, 이 브랜치 작업과 별개다. "
+            parts.append(f"포커스 태스크는 {focus.id}({focus.meta.get('title', '')})로, 이 브랜치 태스크와 별개다. "
                          "포커스가 낡았다면 사용자에게 확인하고 갱신할 것.")
     parts += [
              "",
@@ -77,10 +77,10 @@ def session_start_context(payload: dict) -> str | None:
     parts += parent_context(project, task)
     related = task_list_field(task, "related")
     if related:
-        parts += ["", f"연관 작업: {', '.join(related)} (필요할 때 `adesk list --all` 로 위치를 찾아 읽을 것)"]
+        parts += ["", f"연관 태스크: {', '.join(related)} (필요할 때 `adesk list --all` 로 위치를 찾아 읽을 것)"]
     strays = stray_files(task)
     if strays:
-        parts += ["", f"경고: 작업 폴더에 예상하지 않은 파일이 있습니다(동기화 충돌 사본일 수 있음): {', '.join(strays)}. 사용자에게 알리고 병합 여부를 확인할 것."]
+        parts += ["", f"경고: 태스크 폴더에 예상하지 않은 파일이 있습니다(동기화 충돌 사본일 수 있음): {', '.join(strays)}. 사용자에게 알리고 병합 여부를 확인할 것."]
     broken = broken_task_lines(project)
     if broken:
         parts += [""] + broken
@@ -92,7 +92,7 @@ def session_start_context(payload: dict) -> str | None:
 
 def broken_task_lines(project: Project) -> list[str]:
     broken = [t for t in load_tasks(project) if t.status == "?"]
-    return [f"경고: state.md frontmatter를 읽을 수 없어 작업 목록에서 빠진 작업이 있다: {t.id} ({t.meta.get('error', '')}). "
+    return [f"경고: state.md frontmatter를 읽을 수 없어 태스크 목록에서 빠진 태스크가 있다: {t.id} ({t.meta.get('error', '')}). "
             "사용자에게 알리고 고칠 것." for t in broken]
 
 
@@ -103,14 +103,14 @@ def parent_context(project: Project, task: Task) -> list[str]:
     try:
         parent = get_task(project, parent_id)
     except DeskError:
-        return ["", f"상위 작업 {parent_id} 를 찾을 수 없음."]
+        return ["", f"상위 태스크 {parent_id} 를 찾을 수 없음."]
     titles = decision_titles(parent)
-    return (["", f"--- 상위 작업 {parent.id} state.md (폴더: {parent.dir.as_posix()}) ---",
+    return (["", f"--- 상위 태스크 {parent.id} state.md (폴더: {parent.dir.as_posix()}) ---",
              read_text(parent.state_path).rstrip(),
-             "", "--- 상위 작업 결정 목록 (본문은 상위 작업의 decisions.md) ---"] +
+             "", "--- 상위 태스크 결정 목록 (본문은 상위 태스크의 decisions.md) ---"] +
             ([f"- {t}" for t in titles] or ["(없음)"]) +
-            ["상위 작업은 흐름 전체의 맥락이다. 이 세션의 할 일은 하위 작업 state.md를 따르고, 상위 작업의 유효한 결정을 따른다. "
-             "어긋나는 결정이 필요하면 사용자에게 확인하고 상위 작업의 decisions.md에 기록할 것."])
+            ["상위 태스크는 흐름 전체의 맥락이다. 이 세션의 할 일은 하위 태스크 state.md를 따르고, 상위 태스크의 유효한 결정을 따른다. "
+             "어긋나는 결정이 필요하면 사용자에게 확인하고 상위 태스크의 decisions.md에 기록할 것."])
 
 
 def knowledge_line(root: Path, project: Project) -> str | None:
@@ -327,7 +327,7 @@ def post_tool_use_context(payload: dict) -> str | None:
     if rest:
         lines.append(f"- 외 {len(rest)}건: `kn search --path {rel}`")
     lines.append(f"항목 파일: {kn_dir(root, project).as_posix()}/<ID>-*.md. "
-                 "작업에 영향을 주는 항목은 본문을 읽고 반영할 것 (agent-desk:kn).")
+                 "태스크에 영향을 주는 항목은 본문을 읽고 반영할 것 (agent-desk:kn).")
     shown_by_agent[agent] = sorted(shown | {e["id"] for e in picked})
     session["shown"] = shown_by_agent
     save_session(sid, session)
@@ -362,9 +362,9 @@ def location_change_context(payload: dict, tool_switch: bool) -> str | None:
         save_session(sid, session)
     where = lambda l: f"{Path(l[0]).name} · {l[1] or '(detached)'}" if l else "저장소 밖"
     change = f"{where(prev)} → {where(loc)}" if prev else where(loc)
-    lines = [f"[agent-desk] 작업 위치가 바뀌었다 ({change}). 이전에 주입된 작업 기록은 더 이상 현재 작업이 아니다."]
+    lines = [f"[agent-desk] 작업 위치가 바뀌었다 ({change}). 이전에 주입된 태스크 기록은 더 이상 현재 태스크가 아니다."]
     context = session_start_context(payload)
-    lines.append(context if context else "이 위치에는 등록된 프로젝트의 작업이 없다.")
+    lines.append(context if context else "이 위치에는 등록된 프로젝트의 태스크가 없다.")
     return "\n".join(lines)
 
 
