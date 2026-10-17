@@ -4,7 +4,7 @@ Layer 1 (snapshots): every scene builds a throwaway desk (data root, git reposit
 cache) and runs the real hook entry point (`python bin/desk.py hook <event>`) with a hook
 payload. Scenes with a distinct shape render their output as readable text and compare it with
 tests/snapshots/injection/<scene>.txt; the fixture records are one-liners so the snapshot shows
-the lines the hook writes. Variant scenes (compact, clear, focus variants...) keep no snapshot:
+the lines the hook writes. Variant scenes (todo, child counts, schema...) keep no snapshot:
 they check only the lines that differ from their base scene. Layer 2 (invariants): every hook
 call must exit 0 with empty stderr and print nothing or one valid hook JSON within the size
 budget; the context kinds have required lines.
@@ -100,11 +100,22 @@ class Desk:
             raise AssertionError(f"git {' '.join(args)}: {r.stderr}")
         return r.stdout
 
-    def cli(self, *args: str, cwd: Path | None = None):
-        r = self.run([sys.executable, str(DESK_PY), *args], cwd)
+    def cli(self, *args: str, cwd: Path | None = None, env: dict | None = None):
+        r = self.session_cli(*args, cwd=cwd, env=env or {})
+        return json.loads(r.stdout) if r.stdout.strip() else None
+
+    def session_cli(self, *args: str, cwd: Path | None = None, env: dict | None = None) -> subprocess.CompletedProcess:
+        """A CLI call as the Bash tool of session s1 makes it (env=None), or with the given extra env."""
+        env = {"CLAUDE_CODE_SESSION_ID": "s1"} if env is None else env
+        r = subprocess.run([sys.executable, str(DESK_PY), *args], cwd=cwd or self.repo, env={**self.env, **env},
+                           capture_output=True, text=True, encoding="utf-8", timeout=60)
         if r.returncode:
             raise AssertionError(f"adesk {' '.join(args)}: {r.stderr}")
-        return json.loads(r.stdout) if r.stdout.strip() else None
+        return r
+
+    def focus(self, task_id: str) -> str:
+        """`adesk focus` in session s1: the records it prints."""
+        return self.session_cli("focus", task_id).stdout
 
     def new(self, title: str, *args: str) -> str:
         """The state.md body is cut to one line: snapshots show what the hook writes."""
@@ -249,18 +260,20 @@ class InjectionTest(unittest.TestCase):
     def assert_task_context(self, ctx: str, task_id: str) -> None:
         lines = ctx.splitlines()
         self.assertTrue(lines[0].startswith("[agent-desk] 프로젝트 myapp · 브랜치 "), lines[0])
-        self.assertIn(f"· 태스크 {task_id} (", lines[0])
+        self.assertIn(f"· 포커스 {task_id} (", lines[0])
         self.assertTrue(lines[1].startswith("태스크 폴더: "), lines[1])
+        self.assertNotIn("포커스 태스크는", ctx)
         self.assertIn("--- state.md ---", lines)
         self.assertIn(f"id: {task_id}", lines)
         self.assertIn("--- 결정 목록 (본문은 decisions.md) ---", lines)
         self.assertEqual(ctx.count("--- state.md ---"), 1)
         self.assertIn(TASK_LAST_LINE, lines[-1])
 
-    def assert_no_task_context(self, ctx: str) -> None:
+    def assert_candidates(self, ctx: str, current: str = "없음") -> None:
+        """Candidates to choose from: no task records, the session's focus (or none) on the first line."""
         lines = ctx.splitlines()
         self.assertTrue(lines[0].startswith("[agent-desk] 프로젝트 myapp · 브랜치 "), lines[0])
-        self.assertIn("연결된 태스크 없음.", lines[0])
+        self.assertTrue(lines[0].endswith(f" · 포커스 {current}"), lines[0])
         self.assertIn("agent-desk:desk 스킬", lines[-1])
         self.assertNotIn("--- state.md ---", lines)
 
@@ -330,96 +343,127 @@ class InjectionTest(unittest.TestCase):
         d.new("로그인 기능")
         d.checkout("main")
         d.new("검색 개선", "--no-branch", "--slug", "search-improve", "--todo")
-        ctx = self.call("SessionStart startup (main, 태스크 없음)", "session-start", {"source": "startup"})
-        self.assert_no_task_context(ctx)
+        ctx = self.call("SessionStart startup (main)", "session-start", {"source": "startup"})
+        self.assert_candidates(ctx)
         self.assertIn("--- 열린 태스크 ---", ctx)
+        self.assertIn("사용자의 요청이 이 중 하나를 분명히 가리키면 `adesk focus <id>` 로 포커스하고, 아니면 묻는다.", ctx)
         self.snapshot("no_task_lists_open_tasks",
-                      "공용 브랜치에 태스크가 없으면 열린 태스크 전체를 보여 준다 (README 나중에 할 일 남겨 두기, K0041)")
+                      "브랜치에 연결된 태스크가 없으면 열린 태스크 전체를 후보로 보여 주고 요청으로 고르게 한다 (K0041)")
 
-    def test_branch_task_startup(self):
+    def test_branch_task_recommended(self):
         tid = self.login_task()
         self.desk.new("검색 개선", "--no-branch", "--slug", "search-improve", "--todo")
         self.desk.add_knowledge(1, "세션 토큰 캐시는 설정을 다시 읽어도 초기화되지 않는다", "pitfall", ["src/auth/**"])
         ctx = self.call("SessionStart startup", "session-start", {"source": "startup"})
-        self.assert_task_context(ctx, tid)
-        self.assertIn("- D1. 세션 캐시는 Redis에 둔다  (2026-01-01, 유효)", ctx)
+        self.assert_candidates(ctx)
+        self.assertIn(f"이 브랜치의 태스크: {tid} (로그인 기능) · in_progress", ctx)
+        self.assertIn("다른 열린 태스크 1건:", ctx)
+        self.assertIn("사용자의 요청이 이 브랜치의 일이면 묻지 않고 `adesk focus <id>` 로 포커스하고", ctx)
         self.assertIn("doctor를 한 번도 실행하지 않았다", ctx)
-        self.snapshot("branch_task_startup",
-                      "브랜치 태스크의 현황·결정 목록을 주입한다 (README 다음 날 이어서, 낡은 지식 점검 제안)")
+        self.snapshot("branch_task_recommended",
+                      "브랜치에 연결된 태스크는 기록을 넣지 않고 추천한다 (README 다음 날 이어서, 낡은 지식 점검 제안)")
 
-    def test_branch_task_compact_and_clear(self):
+    def test_focus_then_compact_resume_clear(self):
+        d = self.desk
         tid = self.login_task()
-        base = self.call("SessionStart startup", "session-start", {"source": "startup"})
+        self.call("SessionStart startup", "session-start", {"source": "startup"})
+        shown = d.focus(tid)
+        self.assert_task_context(shown, tid)
+        self.assertIn("- D1. 세션 캐시는 Redis에 둔다  (2026-01-01, 유효)", shown)
+        self.assertNotIn("CLI: ", shown)  # the session already has it from SessionStart
+        self.calls.append(d.normalize(f"=== adesk focus {tid}\n{shown.rstrip()}"))
+        self.assertEqual(d.cli("where", env={"CLAUDE_CODE_SESSION_ID": "s1"})["focus"], tid)
         ctx = self.call("SessionStart compact", "session-start", {"source": "compact"})
         self.assert_task_context(ctx, tid)
-        self.assert_differs(base, ctx, added=["컨텍스트가 방금 압축되었다."])  # K0009
-        ctx = self.call("SessionStart clear", "session-start", {"source": "clear"})
-        self.assertEqual(ctx, base)  # clear injects the task again, as at startup
+        self.assertIn("컨텍스트가 방금 압축되었다.", ctx)  # K0009
+        resumed = self.call("SessionStart resume", "session-start", {"source": "resume"})
+        self.assert_differs(ctx, resumed, added=[], removed=["컨텍스트가 방금 압축되었다."])
+        self.assert_candidates(self.call("SessionStart clear (새 세션 ID)", "session-start",
+                                         {"source": "clear", "session_id": "s2"}))
+        self.snapshot("focus_then_compact_resume_clear",
+                      "요청으로 정한 포커스 태스크의 기록은 focus가 출력하고, 압축·재개 뒤에도 그 세션에 다시 주입한다. "
+                      "/clear는 새 세션이라 후보부터 다시 고른다 (D4)")
 
-    def test_todo_branch_task(self):
+    def test_focus_todo_starts_it(self):
         d = self.desk
         d.checkout("-b", "feature/search")
         tid = d.new("검색 개선", "--todo")
         ctx = self.call("SessionStart startup", "session-start", {"source": "startup"})
-        self.assert_task_context(ctx, tid)
-        d.cli("status", tid, "in_progress")
-        base = self.call("SessionStart startup (진행 중)", "session-start", {"source": "startup"})
-        self.assert_differs(base, ctx, added=["[agent-desk] 프로젝트 myapp", "status: todo", "이 태스크는 착수 전(todo)이다."],
-                            removed=["[agent-desk] 프로젝트 myapp", "status: in_progress"])
+        self.assertIn(f"이 브랜치의 태스크: {tid} (검색 개선) · todo", ctx)
+        shown = d.focus(tid)
+        self.assertIn(f"· 포커스 {tid} (in_progress)", shown.splitlines()[0])
+        self.assertIn("상태 변경: todo → in_progress (포커스)", (d.task_dir(tid) / "log.md").read_text(encoding="utf-8"))
 
-    def test_focus_on_shared_branch(self):
+    def test_new_focuses_task_in_session(self):
         d = self.desk
-        tid = d.new("문서 정리", "--no-branch", "--slug", "docs")  # created on main: becomes the focus
-        ctx = self.call("SessionStart startup (main, 포커스)", "session-start", {"source": "startup"})
-        self.assert_task_context(ctx, tid)
-        self.assertIn("· 포커스)", ctx.splitlines()[0])
-        self.assertNotIn("연결된 태스크가 없어 포커스 태스크를 표시한다", ctx)
-        self.snapshot("focus_on_shared_branch", "공용 브랜치에서는 포커스 태스크를 주입한다")
+        r = d.cli("new", "--title", "문서 정리", "--no-branch", "--slug", "docs", env={"CLAUDE_CODE_SESSION_ID": "s1"})
+        self.assertTrue(r["focused"])
+        self.assert_task_context(self.call("SessionStart resume", "session-start", {"source": "resume"}), r["task"])
+        todo = d.cli("new", "--title", "검색 개선", "--no-branch", "--slug", "search", "--todo",
+                     env={"CLAUDE_CODE_SESSION_ID": "s1"})
+        self.assertFalse(todo["focused"])  # a task for later is not this session's work
+        self.assertFalse(d.cli("new", "--title", "x", "--no-branch", "--slug", "x")["focused"])  # outside a session
 
-    def test_focus_on_unlinked_branch(self):
+    def test_focus_differs_from_branch(self):
         d = self.desk
-        tid = d.new("문서 정리", "--no-branch", "--slug", "docs")
-        base = self.call("SessionStart startup (main, 포커스)", "session-start", {"source": "startup"})
-        d.checkout("-b", "feature/misc")
-        ctx = self.call("SessionStart startup (태스크 없는 브랜치, 포커스)", "session-start", {"source": "startup"})
-        self.assert_task_context(ctx, tid)
-        self.assert_differs(base, ctx, added=["[agent-desk] 프로젝트 myapp · 브랜치 feature/misc",
-                                              "이 브랜치(feature/misc)에는 연결된 태스크가 없어 포커스 태스크를 표시한다"],
-                            removed=["[agent-desk] 프로젝트 myapp · 브랜치 main"])
+        d.git("branch", "feature/login")
+        login = d.new("로그인 기능", "--branch", "feature/login")
+        docs = d.new("문서 정리", "--no-branch", "--slug", "docs")
+        self.call("SessionStart startup (main)", "session-start", {"source": "startup"})
+        d.focus(docs)
+        self.assertIsNone(self.call("UserPromptSubmit (처음 정한 포커스는 알리지 않음)", "user-prompt-submit", {}))
+        d.checkout("feature/login")
+        ctx = self.call("UserPromptSubmit (feature/login 체크아웃)", "user-prompt-submit", {})
+        lines = ctx.splitlines()
+        self.assertEqual(lines[0], "[agent-desk] 작업 위치가 바뀌었다 (myapp · main → myapp · feature/login).")
+        self.assert_candidates("\n".join(lines[1:]), current=f"{docs} (문서 정리)")
+        self.assertIn(f"사용자의 일이 이 브랜치의 태스크로 바뀌었으면 `adesk focus {login}` 로 포커스를 옮길 것.", ctx)
+        ctx = self.call("SessionStart resume (feature/login)", "session-start", {"source": "resume"})
+        self.assert_task_context(ctx, docs)
+        self.assertIn(f"이 브랜치의 태스크는 {login}(로그인 기능)로, 포커스와 다르다.", ctx)
+        self.snapshot("focus_differs_from_branch",
+                      "포커스와 브랜치의 태스크가 다르면 옮길 방법을 알린다 (D4)")
 
-    def test_focus_differs_from_branch_task(self):
+    def test_focus_change_notice(self):
         d = self.desk
-        tid = self.login_task()
-        base = self.call("SessionStart startup (브랜치 태스크)", "session-start", {"source": "startup"})
-        d.cli("focus", d.new("문서 정리", "--no-branch", "--slug", "docs"))
-        ctx = self.call("SessionStart startup (브랜치 태스크 + 다른 포커스)", "session-start", {"source": "startup"})
-        self.assert_task_context(ctx, tid)
-        self.assert_differs(d.normalize(base), d.normalize(ctx),
-                            added=["포커스 태스크는 <YYMMDD>-docs(문서 정리)로", "다른 열린 태스크 1건:"])
+        a = d.new("로그인 기능", "--no-branch", "--slug", "login")
+        b = d.new("문서 정리", "--no-branch", "--slug", "docs")
+        self.call("SessionStart startup", "session-start", {"source": "startup"})
+        d.focus(a)
+        self.assertIsNone(self.call("UserPromptSubmit (처음 정한 포커스)", "user-prompt-submit", {}))
+        d.focus(b)  # e.g. a subagent sharing the session id
+        ctx = self.call("UserPromptSubmit (포커스가 바뀜)", "user-prompt-submit", {})
+        self.assertTrue(ctx.startswith(f"[agent-desk] 이 세션의 포커스가 바뀌었다: {a} → {b}."), ctx)
+        self.assertIsNone(self.call("UserPromptSubmit (다시)", "user-prompt-submit", {}))
+        d.session_cli("focus", "--clear")
+        ctx = self.call("UserPromptSubmit (해제)", "user-prompt-submit", {})
+        self.assertTrue(ctx.startswith(f"[agent-desk] 이 세션의 포커스가 바뀌었다: {b} → 없음."), ctx)
+        self.snapshot("focus_change_notice", "이 세션의 포커스가 바뀌면 다음 프롬프트에서 알린다 (서브에이전트가 바꾼 경우 대비, D3)")
 
     def test_subtask_with_parent(self):
         d = self.desk
-        parent = d.new("1.0 준비", "--no-branch", "--slug", "v1")  # focus
+        parent = d.new("1.0 준비", "--no-branch", "--slug", "v1")
         d.fill_state(parent, goal="1.0을 낸다.")
         d.add_decision(parent, "1.0 기준")
         d.new("문서 정리", "--no-branch", "--slug", "docs", "--parent", parent, "--todo")
         d.checkout("-b", "feature/login")
         child = d.new("로그인 기능", "--parent", parent)
-        ctx = self.call("SessionStart startup (하위 태스크)", "session-start", {"source": "startup"})
+        d.focus(child)
+        ctx = self.call("SessionStart resume (하위 태스크)", "session-start", {"source": "resume"})
         self.assert_task_context(ctx, child)
         self.assertIn(f"--- 상위 태스크 {parent} state.md", ctx)
         self.assertIn("- D1. 1.0 기준  (2026-01-01, 유효)", ctx)
-        self.assertNotIn("포커스 태스크는", ctx)  # the focus is this task's parent
         self.assertIn("다른 열린 태스크 2건:", ctx)
         self.snapshot("subtask_with_parent", "하위 태스크 세션에 상위 태스크 현황과 결정 목록을 함께 주입한다 (K0026)")
 
-    def test_parent_via_focus(self):
+    def test_parent_task_counts_children(self):
         d = self.desk
         parent = d.new("1.0 준비", "--no-branch", "--slug", "v1")
-        base = self.call("SessionStart startup (main, 포커스)", "session-start", {"source": "startup"})
+        d.focus(parent)
+        base = self.call("SessionStart resume (상위 태스크)", "session-start", {"source": "resume"})
         d.new("문서 정리", "--no-branch", "--slug", "docs", "--parent", parent, "--todo")
         d.new("로그인 기능", "--branch", "feature/login", "--parent", parent)
-        ctx = self.call("SessionStart startup (main, 상위 태스크 포커스)", "session-start", {"source": "startup"})
+        ctx = self.call("SessionStart resume (하위 2건)", "session-start", {"source": "resume"})
         self.assert_task_context(ctx, parent)
         self.assert_differs(base, ctx, added=["다른 열린 태스크 2건(하위 2건):"])  # K0041
 
@@ -427,14 +471,15 @@ class InjectionTest(unittest.TestCase):
         tid = self.login_task()
         d = self.desk
         d.checkout("main")
-        self.assert_no_task_context(self.call("SessionStart startup (main)", "session-start", {"source": "startup"}))
+        self.assert_candidates(self.call("SessionStart startup (main)", "session-start", {"source": "startup"}))
         self.assertIsNone(self.call("UserPromptSubmit (같은 위치)", "user-prompt-submit", {}))
         d.checkout("feature/login")
         ctx = self.call("UserPromptSubmit (세션 밖에서 feature/login 체크아웃)", "user-prompt-submit", {})
-        self.assertTrue(ctx.startswith("[agent-desk] 작업 위치가 바뀌었다 (myapp · main → myapp · feature/login)."))
-        self.assert_task_context(ctx.split("\n", 1)[1], tid)
+        self.assertTrue(ctx.startswith("[agent-desk] 작업 위치가 바뀌었다 (myapp · main → myapp · feature/login).\n"))
+        self.assert_candidates(ctx.split("\n", 1)[1])
+        self.assertIn(f"이 브랜치의 태스크: {tid} (로그인 기능)", ctx)
         self.assertIsNone(self.call("UserPromptSubmit (다시, 같은 위치)", "user-prompt-submit", {}))
-        self.snapshot("location_change_prompt", "세션 중 브랜치가 바뀌면 다음 프롬프트에서 새 태스크 맥락을 주입한다 (K0025)")
+        self.snapshot("location_change_prompt", "세션 중 브랜치가 바뀌면 다음 프롬프트에서 새 위치의 후보를 알린다 (K0025)")
 
     def test_location_change_worktree(self):
         d = self.desk
@@ -444,16 +489,21 @@ class InjectionTest(unittest.TestCase):
         self.call("SessionStart startup (main)", "session-start", {"source": "startup"})
         ctx = self.call("PostToolUse EnterWorktree", "post-tool-use",
                         {"tool_name": "EnterWorktree", "tool_input": {}}, cwd=wt)
-        self.assertTrue(ctx.startswith("[agent-desk] 작업 위치가 바뀌었다 (myapp · main → myapp-wt · feature/login)."))
-        self.assert_task_context(ctx.split("\n", 1)[1], tid)
+        self.assertTrue(ctx.startswith("[agent-desk] 작업 위치가 바뀌었다 (myapp · main → myapp-wt · feature/login).\n"))
+        self.assert_candidates(ctx.split("\n", 1)[1])
+        self.assertIn(f"이 브랜치의 태스크: {tid} (로그인 기능)", ctx)
         ctx = self.call("PostToolUse ExitWorktree", "post-tool-use",
                         {"tool_name": "ExitWorktree", "tool_input": {}})
         self.assertTrue(ctx.startswith("[agent-desk] 작업 위치가 바뀌었다 (myapp-wt · feature/login → myapp · main)."))
+        d.focus(tid)  # the main agent's focus: a subagent does not work on it
         ctx = self.call("PostToolUse EnterWorktree (서브에이전트)", "post-tool-use",
                         {"tool_name": "EnterWorktree", "tool_input": {}, "agent_id": "a1"}, cwd=wt)
-        self.assertTrue(ctx.startswith("[agent-desk] 작업 위치가 바뀌었다 (myapp-wt · feature/login)."))
+        self.assertTrue(ctx.startswith("[agent-desk] 작업 위치가 바뀌었다 (myapp-wt · feature/login).\n"))
+        self.assert_candidates(ctx.split("\n", 1)[1])
+        self.assertIn("서브에이전트는 이 세션의 포커스를 바꾸지 않는다", ctx)
         self.assertIsNone(self.call("UserPromptSubmit (메인 위치는 그대로)", "user-prompt-submit", {}))
-        self.snapshot("location_change_worktree", "worktree 진입·이탈 시 새 위치의 태스크 맥락을 주입한다 (K0025, G0007)")
+        self.snapshot("location_change_worktree", "worktree 진입·이탈 시 새 위치의 후보를 알린다. "
+                                                  "서브에이전트에게는 세션의 포커스를 바꾸지 말라고 알린다 (K0025, G0007, D2)")
 
     def test_knowledge_file_access(self):
         d = self.desk

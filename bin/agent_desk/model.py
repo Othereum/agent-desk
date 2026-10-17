@@ -1,8 +1,10 @@
-"""Projects, tasks, task relations (parent/related) and the focus task."""
+"""Projects, tasks, task relations (parent/related) and the task a session works on."""
 
 from __future__ import annotations
 
 import datetime as dt
+import json
+import os
 import re
 import tomllib
 from pathlib import Path
@@ -140,7 +142,7 @@ class Task:
 
 
 # Deleting a task moves its folder to <project>/trash/<id>. Everything that reads tasks
-# (lists, session injection, index, branch matching, focus) looks at tasks/ and archive/
+# (lists, session injection, index, branch matching, session task) looks at tasks/ and archive/
 # only, so a trashed task is simply gone until it is restored; references to it are left
 # as they are and read as a missing task.
 TRASH_DIR = "trash"
@@ -354,48 +356,60 @@ def resolve_parent(project: Project, parent_id: str, child_id: str | None = None
     return parent
 
 
-# The project's current task, independent of branches. A session uses the task
-# linked to the current branch first; the focused task only when there is none
-# (typically on a shared branch such as main in main-only projects).
+# The task a session works on, its focus, is the one the user chose in it (`adesk focus`), kept per Claude
+# Code session id in the local session cache, never in the synced data root: other sessions and
+# machines work on other tasks. The id survives compact and resume and changes on /clear.
+# Subagents share the session id, so they do not change it (desk skill).
 
-FOCUS_FILE = "focus.txt"
+def session_dir() -> Path:
+    # same lookup order as tempfile.gettempdir(), without importing it (pulls in shutil, random)
+    tmp = os.environ.get("TMPDIR") or os.environ.get("TEMP") or os.environ.get("TMP")
+    if not tmp:
+        import tempfile
+        tmp = tempfile.gettempdir()
+    return Path(tmp) / "agent-desk-sessions"
 
 
-def get_focus_id(project: Project) -> str | None:
+def safe_name(name: str | None) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", name or "unknown")
+
+
+def env_session_id() -> str | None:
+    """The Claude Code session a CLI call runs in (set for the Bash tool), None outside one."""
+    return os.environ.get("CLAUDE_CODE_SESSION_ID") or None
+
+
+def session_tasks(session_id: str | None) -> dict[str, str]:
+    """{project key: task id} chosen in the session."""
+    if not session_id:
+        return {}
     try:
-        value = read_text(project.dir / FOCUS_FILE).strip()
-    except OSError:
-        return None
-    return value or None
+        data = json.loads(read_text(session_dir() / safe_name(session_id) / "task.json"))
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in data.items() if isinstance(k, str) and isinstance(v, str)} if isinstance(data, dict) else {}
 
 
-def get_focus_task(project: Project) -> Task | None:
-    focus_id = get_focus_id(project)
-    if not focus_id:
+def set_session_task(session_id: str, project: Project, task_id: str | None) -> None:
+    tasks = session_tasks(session_id)
+    if task_id:
+        tasks[project.key] = task_id
+    else:
+        tasks.pop(project.key, None)
+    write_text(session_dir() / safe_name(session_id) / "task.json", json.dumps(tasks, ensure_ascii=False) + "\n")
+
+
+def get_session_task(project: Project, session_id: str | None) -> Task | None:
+    """The open task chosen in the session for this project; None when none was chosen or it
+    has since been closed, trashed or removed."""
+    task_id = session_tasks(session_id).get(project.key)
+    if not task_id:
         return None
     try:
-        task = get_task(project, focus_id)
+        task = get_task(project, task_id)
     except DeskError:
         return None
     return task if not task.archived and task.status in OPEN_STATUSES else None
-
-
-def set_focus(project: Project, task_id: str | None) -> None:
-    path = project.dir / FOCUS_FILE
-    if task_id:
-        write_text(path, task_id + "\n")
-    elif path.exists():
-        path.unlink()
-
-
-def resolve_session_task(project: Project, branch: str | None) -> tuple[Task | None, str]:
-    """The task a session works on: ("branch" | "focus" | "") source."""
-    if branch:
-        task = find_task_by_branch(project, branch)
-        if task:
-            return task, "branch"
-    task = get_focus_task(project)
-    return (task, "focus") if task else (None, "")
 
 
 def stray_files(task: Task) -> list[str]:

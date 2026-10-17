@@ -4,7 +4,7 @@ Data root: $AGENT_DESK_ROOT, or ~/agent-desk when unset.
 Requires Python 3.11+ (tomllib). Standard library only.
 
 Modules, each importing only from those before it:
-core (constants, errors, io) → frontmatter → gitinfo → model (projects, tasks, relations, focus)
+core (constants, errors, io) → frontmatter → gitinfo → model (projects, tasks, relations, session task)
 → index → knowledge → doctor → hooks → cli (commands, argparse).
 
 Hooks run on every tool use and each import adds startup time: the hook path imports

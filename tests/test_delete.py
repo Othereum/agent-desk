@@ -18,7 +18,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bin"))
 from agent_desk import cli
 from agent_desk.core import DeskError
 from agent_desk.hooks import parent_context
-from agent_desk.model import check_branch_free, find_task_by_branch, get_focus_task, get_project
+from agent_desk.model import check_branch_free, find_task_by_branch, get_project
+
+os.environ.pop("CLAUDE_CODE_SESSION_ID", None)  # tests may run in a Claude Code session: leave its task alone
 
 
 class Delete(unittest.TestCase):
@@ -132,13 +134,23 @@ class Delete(unittest.TestCase):
         self.assertIn("feat", self.fail_with("restore", tid))
         self.assertTrue((self.pdir / "trash" / tid).exists())
 
-    def test_delete_clears_focus(self):
-        tid = self.ok("new", "--title", "f", "--no-branch", "--slug", "f")["task"]  # on main: focused
-        self.assertEqual(get_focus_task(self.project).id, tid)
-        self.assertTrue(self.ok("delete", tid)["unfocused"])
-        self.assertIsNone(self.ok("where")["focus"])
-        self.ok("restore", tid)  # like close and reopen: the focus does not come back
-        self.assertIsNone(get_focus_task(self.project))
+    def test_focus_in_trash(self):
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_SESSION_ID": "s1", "TEMP": self._tmp.name,
+                                          "TMP": self._tmp.name, "TMPDIR": self._tmp.name}):
+            tid = self.ok("new", "--title", "f", "--no-branch", "--slug", "f")["task"]  # focused in s1
+            self.assertEqual(self.ok("where")["focus"], tid)
+            self.ok("delete", tid)
+            self.assertIsNone(self.ok("where")["focus"])  # a trashed task is not the focus
+            self.ok("restore", tid)  # the session's focus still names it
+            self.assertEqual(self.ok("where")["focus"], tid)
+
+    def test_doctor_removes_obsolete_focus_file(self):
+        (self.pdir / "focus.txt").write_text("x\n", encoding="utf-8")  # left by a release before 0.8
+        kinds = [i["kind"] for i in self.ok("doctor")["issues"]]
+        self.assertIn("focus-obsolete", kinds)
+        self.ok("doctor", "--apply")
+        self.assertFalse((self.pdir / "focus.txt").exists())
+        self.assertNotIn("focus-obsolete", [i["kind"] for i in self.ok("doctor")["issues"]])
 
     def test_id_collisions(self):
         tid = self.new("a")

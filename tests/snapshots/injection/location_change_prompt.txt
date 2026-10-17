@@ -1,14 +1,14 @@
-# 세션 중 브랜치가 바뀌면 다음 프롬프트에서 새 태스크 맥락을 주입한다 (K0025)
+# 세션 중 브랜치가 바뀌면 다음 프롬프트에서 새 위치의 후보를 알린다 (K0025)
 
 === SessionStart startup (main)
 [additionalContext SessionStart]
-[agent-desk] 프로젝트 myapp · 브랜치 main · 연결된 태스크 없음.
+[agent-desk] 프로젝트 myapp · 브랜치 main · 포커스 없음
 CLI: Bash 도구에서 `adesk ...`로 실행한다.
 
 --- 열린 태스크 ---
 - <YYMMDD>-feature__login (로그인 기능) · in_progress · 브랜치 feature/login
-이어서 할 태스크면 사용자에게 확인하고, 브랜치 태스크는 그 브랜치로 전환하고 브랜치 없는 태스크는 `adesk focus <id>` 로 포커스를 지정할 것.
 
+포커스는 사용자의 요청으로 정한다. 사용자의 요청이 이 중 하나를 분명히 가리키면 `adesk focus <id>` 로 포커스하고, 아니면 묻는다. 태스크와 무관한 세션이면 포커스하지 않고, 포커스 전에는 기록하지 않는다.
 태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다.
 
 === UserPromptSubmit (같은 위치)
@@ -16,37 +16,12 @@ CLI: Bash 도구에서 `adesk ...`로 실행한다.
 
 === UserPromptSubmit (세션 밖에서 feature/login 체크아웃)
 [additionalContext UserPromptSubmit]
-[agent-desk] 작업 위치가 바뀌었다 (myapp · main → myapp · feature/login). 이전에 주입된 태스크 기록은 더 이상 현재 태스크가 아니다.
-[agent-desk] 프로젝트 myapp · 브랜치 feature/login · 태스크 <YYMMDD>-feature__login (in_progress)
-태스크 폴더: <TMP>/desk/projects/myapp/tasks/<YYMMDD>-feature__login
+[agent-desk] 작업 위치가 바뀌었다 (myapp · main → myapp · feature/login).
+[agent-desk] 프로젝트 myapp · 브랜치 feature/login · 포커스 없음
 CLI: Bash 도구에서 `adesk ...`로 실행한다.
-
---- state.md ---
----
-id: <YYMMDD>-feature__login
-title: 로그인 기능
-status: in_progress
-project: myapp
-branches: [feature/login]
-links: []
-design_doc:
-parent:
-related: []
-created: <DATE>
-updated: <DATE>
-verified: <DATE> <TIME>
----
-## 목표
-로그인 기능을 만든다.
-## 현재 상태
-- 로그인 API 완료.
-## 다음 할 일
-- 토큰 갱신
-
---- 결정 목록 (본문은 decisions.md) ---
-- D1. 세션 캐시는 Redis에 둔다  (2026-01-01, 유효)
-
-위 기록은 확인할 출발점이다. 코드와 다를 수 있으니 의존하기 전에 검증한다. 결정을 확정하거나 단계를 끝내면 바로 decisions.md·state.md·log.md에 기록한다. 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다.
+이 브랜치의 태스크: <YYMMDD>-feature__login (로그인 기능) · in_progress · 브랜치 feature/login
+포커스는 사용자의 요청으로 정한다. 사용자의 요청이 이 브랜치의 일이면 묻지 않고 `adesk focus <id>` 로 포커스하고, 다른 태스크를 가리키거나 애매하면 묻는다. 태스크와 무관한 세션이면 포커스하지 않고, 포커스 전에는 기록하지 않는다.
+태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다.
 
 === UserPromptSubmit (다시, 같은 위치)
 (출력 없음)

@@ -14,6 +14,8 @@ sys.path.insert(0, str(BIN))
 from agent_desk.frontmatter import update_frontmatter
 from agent_desk.knowledge import Entry, search_score, word_stem
 
+os.environ.pop("CLAUDE_CODE_SESSION_ID", None)  # tests may run in a Claude Code session: leave its task alone
+
 
 def entry(title="", body="", tags=(), paths=()):
     return Entry("K0001", Path("K0001.md"), {"title": title, "tags": list(tags), "paths": list(paths)},

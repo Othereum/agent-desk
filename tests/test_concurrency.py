@@ -15,6 +15,8 @@ sys.path.insert(0, str(BIN))
 
 from agent_desk.core import DeskError, file_lock, is_write_temp, move_dir, root_lock, root_lock_name, write_text
 
+os.environ.pop("CLAUDE_CODE_SESSION_ID", None)  # tests may run in a Claude Code session: leave its task alone
+
 
 class MoveDir(unittest.TestCase):
     """Windows refuses a folder rename while a sync client has a file in it open."""

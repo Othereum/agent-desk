@@ -17,8 +17,8 @@ from .core import (
 from .frontmatter import parse_frontmatter
 from .gitinfo import RepoInfo, git, is_under, native_path, normalize_path, repo_info
 from .model import (
-    DECISION_LINE, Project, Task, get_focus_task, get_task, head_branch, load_tasks, match_project, projects_dir,
-    resolve_session_task, strip_comments, stray_files, task_list_field,
+    DECISION_LINE, Project, Task, find_task_by_branch, get_session_task, get_task, head_branch, load_tasks,
+    match_project, projects_dir, safe_name, session_dir, session_tasks, strip_comments, stray_files, task_list_field,
 )
 from .knowledge import glob_prefix, glob_regex, inject_order, kn_dir, load_entries, repo_relative
 from .doctor import DOCTOR_MARKER, DOCTOR_REMIND_DAYS
@@ -31,38 +31,72 @@ def decision_titles(task: Task) -> list[str]:
     return [m.group(1) for m in DECISION_LINE.finditer(strip_comments(read_text(path)))]
 
 
-def session_start_context(payload: dict) -> str | None:
+CLI_LINE = "CLI: Bash 도구에서 `adesk ...`로 실행한다."
+RULES_LINE = "태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다."
+
+
+def session_start_context(payload: dict, location_change: bool = False) -> str | None:
+    """The task chosen in this session (after compact or resume), otherwise the candidates to
+    choose from. A subagent shares the session id but does not work on the session's choice."""
     root = desk_root()
     if not (root / "projects").is_dir():
         return None
-    cwd = Path(payload.get("cwd") or os.getcwd())
-    info = repo_info(cwd)
+    info = repo_info(Path(payload.get("cwd") or os.getcwd()))
     project = match_project(root, info)
     if not project:
         return None
-    cli = "CLI: Bash 도구에서 `adesk ...`로 실행한다."
-    branch = info.branch
-    head = f"[agent-desk] 프로젝트 {project.key} · 브랜치 {branch or '(detached)'}"
+    agent = bool(payload.get("agent_id"))
+    current = None if agent else get_session_task(project, payload.get("session_id"))
+    if current and not location_change:
+        return task_context(root, project, current, info.branch, compact=payload.get("source") == "compact")
+    return candidates_context(root, project, info.branch, current, agent)
+
+
+def context_head(root: Path, project: Project, branch: str | None) -> tuple[str, list[str]]:
+    """The first-line prefix and the CLI and knowledge lines shared by both kinds of context."""
     kn_line = knowledge_line(root, project)
     if migrate_line := schema_line(root):
         kn_line = f"{kn_line}\n{migrate_line}" if kn_line else migrate_line
-    task, source = resolve_session_task(project, branch)
-    if not task:
-        # an unreadable task may be this branch's: say so before anything suggests a new task
-        lines = ([f"{head} · 연결된 태스크 없음."] + broken_task_lines(project) +
-                 [cli] + ([kn_line] if kn_line else []))
-        open_tasks = [t for t in load_tasks(project) if t.status in OPEN_STATUSES]
-        if open_tasks:
-            lines += ["", "--- 열린 태스크 ---"] + [open_task_line(t) for t in open_tasks]
-            lines.append("이어서 할 태스크면 사용자에게 확인하고, 브랜치 태스크는 그 브랜치로 전환하고 "
-                         "브랜치 없는 태스크는 `adesk focus <id>` 로 포커스를 지정할 것.")
-            lines.append("")
-        return "\n".join(lines + ["태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다."])
+    return (f"[agent-desk] 프로젝트 {project.key} · 브랜치 {branch or '(detached)'}",
+            [CLI_LINE] + ([kn_line] if kn_line else []))
+
+
+def candidates_context(root: Path, project: Project, branch: str | None, current: Task | None, agent: bool) -> str:
+    head, common = context_head(root, project, branch)
+    now = f"{current.id} ({current.meta.get('title', '')})" if current else "없음"
+    # an unreadable task may be this branch's: say so before anything suggests a new task
+    lines = [f"{head} · 포커스 {now}"] + broken_task_lines(project) + common
+    open_tasks = [t for t in load_tasks(project) if t.status in OPEN_STATUSES]
+    branch_task = find_task_by_branch(project, branch) if branch else None
+    if branch_task and current and branch_task.id == current.id:
+        branch_task = None
+    if branch_task:
+        lines.append(f"이 브랜치의 태스크: {open_task_line(branch_task)[2:]}")
+        others = [t for t in open_tasks if t.id != branch_task.id and not (current and t.id == current.id)]
+        if others:
+            lines.append(f"다른 열린 태스크 {len(others)}건: 필요할 때 `adesk list` 로 확인할 것.")
+    elif open_tasks and not current:
+        lines += ["", "--- 열린 태스크 ---"] + [open_task_line(t) for t in open_tasks] + [""]
+    if agent:
+        lines.append("서브에이전트는 이 세션의 포커스를 바꾸지 않는다(`adesk focus` 금지). 기록은 지시받은 태스크 ID로 한다.")
+    elif current and branch_task:
+        lines.append(f"사용자의 일이 이 브랜치의 태스크로 바뀌었으면 `adesk focus {branch_task.id}` 로 포커스를 옮길 것.")
+    elif not current and (branch_task or open_tasks):
+        pick = ("사용자의 요청이 이 브랜치의 일이면 묻지 않고 `adesk focus <id>` 로 포커스하고, 다른 태스크를 가리키거나 애매하면 묻는다."
+                if branch_task else "사용자의 요청이 이 중 하나를 분명히 가리키면 `adesk focus <id>` 로 포커스하고, 아니면 묻는다.")
+        lines.append(f"포커스는 사용자의 요청으로 정한다. {pick} 태스크와 무관한 세션이면 포커스하지 않고, 포커스 전에는 기록하지 않는다.")
+    return "\n".join(lines + [RULES_LINE])
+
+
+def task_context(root: Path, project: Project, task: Task, branch: str | None, compact: bool = False,
+                 chosen: bool = False) -> str:
+    """The task's records: what SessionStart injects for the session's focus and `adesk focus`
+    prints (chosen: the session already has the CLI and knowledge lines, and the user chose it)."""
+    head, common = context_head(root, project, branch)
     design_doc = task.meta.get("design_doc")
-    label = "" if source == "branch" else " · 포커스"
-    parts = [f"{head} · 태스크 {task.id} ({task.status}{label})",
-             f"태스크 폴더: {task.dir.as_posix()}"] + ([f"설계 문서: {design_doc}"] if design_doc else []) + [
-             cli] + ([kn_line] if kn_line else [])
+    parts = [f"{head} · 포커스 {task.id} ({task.status})",
+             f"태스크 폴더: {task.dir.as_posix()}"] + ([f"설계 문서: {design_doc}"] if design_doc else []) + (
+             [] if chosen else common)
     others = [t for t in load_tasks(project) if t.status in OPEN_STATUSES and t.id != task.id]
     if others:
         children = sum(1 for t in others if t.meta.get("parent") == task.id)
@@ -70,14 +104,11 @@ def session_start_context(payload: dict) -> str | None:
         parts.append(f"다른 열린 태스크 {len(others)}건{sub}: 필요할 때 `adesk list` 로 확인할 것.")
     if task.status == "todo":
         parts.append("이 태스크는 착수 전(todo)이다. 작업을 시작하면 `adesk status <id> in_progress` 로 바꿀 것.")
-    if source == "focus" and branch and not project.is_shared(branch):
-        parts.append(f"이 브랜치({branch})에는 연결된 태스크가 없어 포커스 태스크를 표시한다. 이 브랜치의 일과 관계없을 수 있으니 "
-                     "관련이 없으면 사용자에게 확인하고 새 태스크를 만들거나 `link` 로 연결할 것.")
-    if source == "branch":
-        focus = get_focus_task(project)
-        if focus and focus.id != task.id and focus.id != (task.meta.get("parent") or ""):
-            parts.append(f"포커스 태스크는 {focus.id}({focus.meta.get('title', '')})로, 이 브랜치 태스크와 별개다. "
-                         "포커스가 낡았다면 사용자에게 확인하고 갱신할 것.")
+    if not chosen and branch:
+        other = find_task_by_branch(project, branch)
+        if other and other.id != task.id and other.id != (task.meta.get("parent") or ""):
+            parts.append(f"이 브랜치의 태스크는 {other.id}({other.meta.get('title', '')})로, 포커스와 다르다. "
+                         f"사용자의 일이 그 태스크면 `adesk focus {other.id}` 로 포커스를 옮길 것.")
     parts += [
              "",
              "--- state.md ---",
@@ -94,7 +125,7 @@ def session_start_context(payload: dict) -> str | None:
     broken = broken_task_lines(project)
     if broken:
         parts += [""] + broken
-    if payload.get("source") == "compact":
+    if compact:
         parts += ["", "컨텍스트가 방금 압축되었다. 압축 전 진행 내용과 결정이 state.md·decisions.md·log.md에 반영되어 있는지 확인하고, 빠진 내용이 있으면 지금 기록할 것."]
     parts += ["", "위 기록은 확인할 출발점이다. 코드와 다를 수 있으니 의존하기 전에 검증한다. 결정을 확정하거나 단계를 끝내면 바로 decisions.md·state.md·log.md에 기록한다. 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다."]
     return "\n".join(parts)
@@ -157,23 +188,11 @@ def knowledge_line(root: Path, project: Project) -> str | None:
     return line
 
 
-# Per-session cache for the PostToolUse hook: which knowledge entries were already
-# injected, and which project each repository maps to (avoids git calls per tool use).
-def session_dir() -> Path:
-    # same lookup order as tempfile.gettempdir(), without importing it (pulls in shutil, random)
-    tmp = os.environ.get("TMPDIR") or os.environ.get("TEMP") or os.environ.get("TMP")
-    if not tmp:
-        import tempfile
-        tmp = tempfile.gettempdir()
-    return Path(tmp) / "agent-desk-sessions"
-
-
+# Per-session cache for the hooks (session_dir in model): which knowledge entries were already
+# injected, which project each repository maps to (avoids git calls per tool use), the location
+# and the session's task last announced to the main agent.
 SESSION_TTL_DAYS = 7
 KN_INJECT_LIMIT = 15  # titles only, so this is about the size of five entries with summaries
-
-
-def safe_name(name: str | None) -> str:
-    return re.sub(r"[^A-Za-z0-9_.-]", "_", name or "unknown")
 
 
 def session_file(session_id: str | None) -> Path:
@@ -473,10 +492,32 @@ def location_change_context(payload: dict, tool_switch: bool) -> str | None:
         save_session(sid, session)
     where = lambda l: f"{Path(l[0]).name} · {l[1] or '(detached)'}" if l else "저장소 밖"
     change = f"{where(prev)} → {where(loc)}" if prev else where(loc)
-    lines = [f"[agent-desk] 작업 위치가 바뀌었다 ({change}). 이전에 주입된 태스크 기록은 더 이상 현재 태스크가 아니다."]
-    context = session_start_context(payload)
+    lines = [f"[agent-desk] 작업 위치가 바뀌었다 ({change})."]
+    context = session_start_context(payload, location_change=True)
     lines.append(context if context else "이 위치에는 등록된 프로젝트의 태스크가 없다.")
     return "\n".join(lines)
+
+
+def task_change_context(payload: dict) -> str | None:
+    """A change of the session's task since it was last announced to the main agent. Subagents
+    share the session id and are told not to change it; this keeps a change from going unseen.
+    The first choice in a session is not announced: the agent made it a moment ago."""
+    if payload.get("agent_id"):
+        return None
+    sid = payload.get("session_id")
+    chosen = session_tasks(sid)
+    session = load_session(sid)
+    announced = session.get("tasks") if isinstance(session.get("tasks"), dict) else {}
+    if chosen == announced:
+        return None
+    changes = [f"{announced[k]} → {chosen.get(k) or '없음'}" for k in sorted(announced)
+               if chosen.get(k) != announced[k]]
+    session["tasks"] = chosen
+    save_session(sid, session)
+    if not changes:
+        return None
+    return (f"[agent-desk] 이 세션의 포커스가 바뀌었다: {', '.join(changes)}. "
+            "직접 바꾼 것이 아니면 서브에이전트가 바꾼 것이니 사용자에게 알리고 `adesk focus` 로 바로잡을 것.")
 
 
 def cmd_hook(name: str) -> None:
@@ -494,6 +535,7 @@ def cmd_hook(name: str) -> None:
             if not payload.get("agent_id"):
                 session = load_session(sid)
                 session["location"] = current_location(payload)
+                session["tasks"] = session_tasks(sid)
                 save_session(sid, session)
         elif name == "pre-tool-use":
             reason = pre_tool_use_decision(payload)
@@ -503,7 +545,8 @@ def cmd_hook(name: str) -> None:
                     "permissionDecisionReason": reason}}, ensure_ascii=False))
             return
         elif name == "user-prompt-submit":
-            context, event = location_change_context(payload, tool_switch=False), "UserPromptSubmit"
+            parts = [c for c in (task_change_context(payload), location_change_context(payload, tool_switch=False)) if c]
+            context, event = "\n\n".join(parts) or None, "UserPromptSubmit"
         elif payload.get("tool_name") in ("EnterWorktree", "ExitWorktree"):
             context, event = location_change_context(payload, tool_switch=True), "PostToolUse"
         else:

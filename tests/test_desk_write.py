@@ -9,6 +9,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+os.environ.pop("CLAUDE_CODE_SESSION_ID", None)  # tests may run in a Claude Code session: leave its task alone
+
 DESK = Path(__file__).resolve().parents[1] / "bin" / "desk.py"
 
 STATE = ("---\nid: t1\ntitle: 제목\nstatus: in_progress\nproject: p\nbranches: []\nlinks: []\ndesign_doc:\n"

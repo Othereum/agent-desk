@@ -19,9 +19,9 @@ from .frontmatter import format_scalar, format_value, parse_frontmatter, split_f
 from .gitinfo import is_under, native_path, normalize_path, repo_info
 from .model import (
     TRASH_DIR, TRASH_LOG_LINE, append_log, build_id, check_branch_free, children_of, current_project,
-    decision_problems, find_trashed, get_focus_id, get_focus_task, get_project, get_task, load_projects,
-    load_tasks, load_trash, main_worktree, match_project, projects_dir, render_template, resolve_parent,
-    resolve_session_task, sanitize, set_focus, set_meta, task_dir_of, task_list_field, touch_task, trashed_at,
+    decision_problems, env_session_id, find_task_by_branch, find_trashed, get_project, get_session_task, get_task,
+    load_projects, load_tasks, load_trash, main_worktree, match_project, projects_dir, render_template,
+    resolve_parent, sanitize, set_meta, set_session_task, task_dir_of, task_list_field, touch_task, trashed_at,
 )
 from .index import write_index
 from .knowledge import (
@@ -30,7 +30,7 @@ from .knowledge import (
 )
 from .doctor import DOCTOR_MARKER, doctor_knowledge, doctor_tasks, project_repo
 from . import HOOK_EVENTS
-from .hooks import cmd_hook
+from .hooks import cmd_hook, task_context
 
 
 def out(data) -> None:
@@ -41,17 +41,18 @@ def cmd_where(args) -> None:
     root = desk_root()
     info = repo_info(Path(args.cwd))
     project = match_project(root, info) if (root / "projects").is_dir() else None
-    task, source = resolve_session_task(project, info.branch) if project else (None, "")
+    focus = get_session_task(project, env_session_id()) if project else None
+    branch_task = find_task_by_branch(project, info.branch) if project and info.branch else None
     out({
         "root": str(root),
         "repo": str(info.toplevel) if info.toplevel else None,
         "branch": info.branch,
         "project": project.key if project else None,
         "project_dir": str(project.dir) if project else None,
-        "task": task.id if task else None,
-        "task_source": source or None,
-        "task_dir": str(task.dir) if task else None,
-        "focus": (focus.id if (focus := get_focus_task(project)) else None) if project else None,
+        "session": env_session_id(),
+        "focus": focus.id if focus else None,
+        "focus_dir": str(focus.dir) if focus else None,
+        "branch_task": branch_task.id if branch_task else None,
     })
 
 
@@ -107,33 +108,38 @@ def cmd_new(args) -> None:
     }
     for name in TASK_FILES:
         write_text(tdir / name, render_template(project.lang, name, values))
-    # a branchless task created on a shared branch (or detached) becomes the focus
-    focused = (branch is None and not args.no_focus and not args.todo
-               and (not info.branch or project.is_shared(info.branch)))
+    # creating a task to work on now makes it this session's focus; a todo task is for later
+    sid = env_session_id()
+    focused = bool(sid) and not args.todo and not args.no_focus
     if focused:
-        set_focus(project, task_id)
+        set_session_task(sid, project, task_id)
     write_index(project)
     out({"task": task_id, "dir": str(tdir), "branch": branch,
          "parent": parent.id if parent else None, "related": related, "focused": focused})
 
 
 def cmd_focus(args) -> None:
+    """Choose the task this session works on (its focus) and print its records (text, not JSON)."""
     root = ensure_root()
-    project, _ = current_project(root, Path(args.cwd), args.project)
-    if args.clear:
-        set_focus(project, None)
-    elif args.id:
-        task = get_task(project, args.id)
-        if task.archived or task.status not in OPEN_STATUSES:
-            raise DeskError(f"열린 태스크만 포커스할 수 있습니다: {task.id} ({task.status})")
-        set_focus(project, task.id)
-        if task.status == "todo":  # focusing a task is starting it
-            set_meta(task, {"status": "in_progress"})
-            append_log(task, ["상태 변경: todo → in_progress (포커스 지정)"])
-            write_index(project)
-    focus = get_focus_task(project)
-    out({"project": project.key, "focus": focus.id if focus else None,
-         "title": focus.meta.get("title", "") if focus else None})
+    project, info = current_project(root, Path(args.cwd), args.project)
+    if not args.id and not args.clear:
+        raise DeskError("포커스할 태스크 ID를 지정하세요 (해제는 --clear)")
+    task = None if args.clear else get_task(project, args.id)
+    if task and (task.archived or task.status not in OPEN_STATUSES):
+        raise DeskError(f"열린 태스크만 포커스할 수 있습니다: {task.id} ({task.status}). 종료된 태스크는 adesk reopen 으로 먼저 재개하세요")
+    sid = env_session_id()
+    if not sid:
+        raise DeskError("Claude Code 세션 밖이라 포커스를 둘 수 없습니다(포커스는 세션마다 따로 있다. CLAUDE_CODE_SESSION_ID 없음)")
+    if not task:
+        set_session_task(sid, project, None)
+        out({"project": project.key, "focus": None})
+        return
+    set_session_task(sid, project, task.id)
+    if task.status == "todo":  # focusing a task is starting it
+        set_meta(task, {"status": "in_progress"})
+        append_log(task, ["상태 변경: todo → in_progress (포커스)"])
+        write_index(project)
+    print(task_context(root, project, task, info.branch, chosen=True))
 
 
 def cmd_relate(args) -> None:
@@ -209,7 +215,7 @@ def cmd_unlink(args) -> None:
     append_log(task, [f"브랜치 연결 해제: {branch}"])
     write_index(project)
     out({"task": task.id, "branches": kept, "changed": True,
-         **({"warning": "연결된 브랜치가 없는 태스크가 되었습니다. adesk focus 로 포커스를 지정하거나 adesk link 로 다시 연결하세요"} if not kept else {})})
+         **({"warning": "연결된 브랜치가 없는 태스크가 되었습니다. 브랜치에서 이어 갈 일이면 adesk link 로 다시 연결하세요"} if not kept else {})})
 
 
 def cmd_status(args) -> None:
@@ -243,12 +249,9 @@ def cmd_close(args) -> None:
         set_meta(task, {"status": args.result})
         append_log(task, [f"태스크 종료: {args.result}"] + ([args.note] if args.note else []))
     move_dir(task.dir, dest)
-    unfocused = (get_focus_id(project) or "").casefold() == task.id.casefold()
-    if unfocused:
-        set_focus(project, None)
     write_index(project)
     open_children = [t.id for t in children_of(project, task.id, open_only=True)]
-    out({"task": task.id, "status": args.result, "dir": str(dest), "unfocused": unfocused,
+    out({"task": task.id, "status": args.result, "dir": str(dest),
          **({"warning": f"열린 하위 태스크가 남아 있습니다: {', '.join(open_children)}"} if open_children else {})})
 
 
@@ -291,11 +294,8 @@ def cmd_delete(args) -> None:
     append_log(task, [TRASH_LOG_LINE])
     dest.parent.mkdir(parents=True, exist_ok=True)
     move_dir(task.dir, dest)
-    unfocused = (get_focus_id(project) or "").casefold() == task.id.casefold()
-    if unfocused:  # as close does: restoring the task does not bring the focus back
-        set_focus(project, None)
     write_index(project)
-    out({"task": task.id, "status": task.status, "dir": str(dest), "deleted": True, "unfocused": unfocused})
+    out({"task": task.id, "status": task.status, "dir": str(dest), "deleted": True})
 
 
 def cmd_restore(args) -> None:
@@ -399,7 +399,7 @@ def cmd_kn_add(args) -> None:
         raise DeskError("전역 항목에는 --paths 를 쓸 수 없습니다. --tags 로 매칭합니다")
     sources = split_csv(args.sources)
     if not sources and project:
-        task, _ = resolve_session_task(project, info.branch)
+        task = get_session_task(project, env_session_id())
         if task:
             sources = [task.id]
     body = args.body or "<!-- 요약: 15줄 이내. 사실 하나만 담고, 근거가 되는 코드 위치(경로:줄)를 포함한다. -->"
@@ -791,15 +791,17 @@ def cmd_doctor(args) -> None:
         issues.append({"level": "warn", "kind": "python-alias", "target": alias,
                        "message": PYTHON_ALIAS_MESSAGE.format(path=alias)})
     doctor_tasks(project, top, issues)
-    focus_id = get_focus_id(project)
-    if focus_id and not get_focus_task(project):
-        issues.append({"level": "info", "kind": "focus-stale", "id": focus_id,
-                       "message": "포커스가 종료되었거나 휴지통에 있거나 없는 태스크를 가리킴. `focus --clear` 또는 다른 태스크로 지정"})
+    if (project.dir / OBSOLETE_FOCUS_FILE).exists():
+        issues.append({"level": "info", "kind": "focus-obsolete", "target": str(project.dir / OBSOLETE_FOCUS_FILE),
+                       "message": "0.8 이전의 프로젝트 공용 포커스 파일(지금 포커스는 세션마다 따로 둔다). `doctor --apply` 로 지운다"})
     doctor_knowledge(root, project, top, args.min_commits, issues)
     doctor_knowledge(root, None, None, args.min_commits, issues)
 
     applied = []
     if args.apply:
+        if (project.dir / OBSOLETE_FOCUS_FILE).exists():
+            (project.dir / OBSOLETE_FOCUS_FILE).unlink()
+            applied.append(OBSOLETE_FOCUS_FILE)
         stale_kinds = ("kn-changed", "kn-paths-empty", "kn-missing-ref")
         reasons: dict[str, list[str]] = {}
         for i in issues:
@@ -818,6 +820,9 @@ def cmd_doctor(args) -> None:
 
 # commands that never change the data root. Every other command, a new one included, holds the
 # data root lock for its whole run (K0044). hook only reads (its session cache is in the temp dir)
+# the focus file of releases before 0.8 (one current task per project, replaced by the session's task)
+OBSOLETE_FOCUS_FILE = "focus.txt"
+
 READ_ONLY_COMMANDS = {"where", "list", "hook", "kn list", "kn search", "kn show"}
 
 
@@ -858,12 +863,13 @@ def run(argv: list[str]) -> int:
     p.add_argument("--no-branch", action="store_true")
     p.add_argument("--parent", help="상위 태스크 ID (한 단계만 허용)")
     p.add_argument("--related", help="연관 태스크 ID (쉼표 구분)")
-    p.add_argument("--no-focus", action="store_true", help="브랜치 없는 태스크를 만들어도 포커스로 지정하지 않음")
-    p.add_argument("--todo", action="store_true", help="착수 전(todo) 태스크로 만듦. 포커스로 지정하지 않음")
+    p.add_argument("--no-focus", action="store_true", help="만든 태스크에 이 세션의 포커스를 두지 않음 (서브에이전트 등)")
+    p.add_argument("--no-open", dest="no_focus", action="store_true", help=argparse.SUPPRESS)  # a guess (K0035)
+    p.add_argument("--todo", action="store_true", help="착수 전(todo) 태스크로 만듦. 포커스를 두지 않음")
 
-    p = sub.add_parser("focus", help="포커스 태스크 조회·지정·해제 (브랜치에 연결된 태스크가 없을 때 쓰는 태스크)")
+    p = sub.add_parser("focus", help="이 세션의 포커스(작업할 태스크)를 정하고 그 기록을 텍스트로 출력 (todo면 진행 중으로)")
     p.add_argument("id", nargs="?")
-    p.add_argument("--clear", action="store_true")
+    p.add_argument("--clear", action="store_true", help="이 세션의 포커스 해제")
 
     p = sub.add_parser("relate", help="태스크의 상위·연관 관계 변경")
     p.add_argument("id")
@@ -937,7 +943,7 @@ def run(argv: list[str]) -> int:
     p.add_argument("--kind", required=True, choices=KN_KINDS)
     p.add_argument("--paths", help="관련 경로 glob (저장소 기준, 쉼표 구분)")
     p.add_argument("--tags", help="태그 (쉼표 구분)")
-    p.add_argument("--sources", help="출처 태스크 ID (기본: 현재 브랜치의 태스크, 없으면 포커스 태스크)")
+    p.add_argument("--sources", help="출처 태스크 ID (기본: 이 세션의 포커스)")
     p.add_argument("--location", default="inline", help="inline | repo:<경로> | claude-docs:<url>")
     p.add_argument("--slug", help="파일명용 영문 슬러그")
     p.add_argument("--body", help="본문 (생략 시 안내 주석만 넣고 이후 put 으로 작성)")
@@ -988,6 +994,10 @@ def run(argv: list[str]) -> int:
     p = sub.add_parser("hook", help="Claude Code hook 진입점")
     p.add_argument("event", choices=HOOK_EVENTS)
 
+    command = next((a for i, a in enumerate(argv) if not a.startswith("-")
+                    and (i == 0 or argv[i - 1] not in ("--cwd", "--project"))), None)
+    if command in ("open", "use", "switch"):  # guesses for focus (K0035)
+        argv = [*argv[:argv.index(command)], "focus", *argv[argv.index(command) + 1:]]
     args = ap.parse_args(argv)
     handlers = {
         "where": cmd_where, "project-init": cmd_project_init, "new": cmd_new, "set": cmd_set,

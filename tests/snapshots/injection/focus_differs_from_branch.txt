@@ -1,0 +1,56 @@
+# 포커스와 브랜치의 태스크가 다르면 옮길 방법을 알린다 (D4)
+
+=== SessionStart startup (main)
+[additionalContext SessionStart]
+[agent-desk] 프로젝트 myapp · 브랜치 main · 포커스 없음
+CLI: Bash 도구에서 `adesk ...`로 실행한다.
+
+--- 열린 태스크 ---
+- <YYMMDD>-docs (문서 정리) · in_progress · 브랜치 없음
+- <YYMMDD>-feature__login (로그인 기능) · in_progress · 브랜치 feature/login
+
+포커스는 사용자의 요청으로 정한다. 사용자의 요청이 이 중 하나를 분명히 가리키면 `adesk focus <id>` 로 포커스하고, 아니면 묻는다. 태스크와 무관한 세션이면 포커스하지 않고, 포커스 전에는 기록하지 않는다.
+태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다.
+
+=== UserPromptSubmit (처음 정한 포커스는 알리지 않음)
+(출력 없음)
+
+=== UserPromptSubmit (feature/login 체크아웃)
+[additionalContext UserPromptSubmit]
+[agent-desk] 작업 위치가 바뀌었다 (myapp · main → myapp · feature/login).
+[agent-desk] 프로젝트 myapp · 브랜치 feature/login · 포커스 <YYMMDD>-docs (문서 정리)
+CLI: Bash 도구에서 `adesk ...`로 실행한다.
+이 브랜치의 태스크: <YYMMDD>-feature__login (로그인 기능) · in_progress · 브랜치 feature/login
+사용자의 일이 이 브랜치의 태스크로 바뀌었으면 `adesk focus <YYMMDD>-feature__login` 로 포커스를 옮길 것.
+태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다.
+
+=== SessionStart resume (feature/login)
+[additionalContext SessionStart]
+[agent-desk] 프로젝트 myapp · 브랜치 feature/login · 포커스 <YYMMDD>-docs (in_progress)
+태스크 폴더: <TMP>/desk/projects/myapp/tasks/<YYMMDD>-docs
+CLI: Bash 도구에서 `adesk ...`로 실행한다.
+다른 열린 태스크 1건: 필요할 때 `adesk list` 로 확인할 것.
+이 브랜치의 태스크는 <YYMMDD>-feature__login(로그인 기능)로, 포커스와 다르다. 사용자의 일이 그 태스크면 `adesk focus <YYMMDD>-feature__login` 로 포커스를 옮길 것.
+
+--- state.md ---
+---
+id: <YYMMDD>-docs
+title: 문서 정리
+status: in_progress
+project: myapp
+branches: []
+links: []
+design_doc:
+parent:
+related: []
+created: <DATE>
+updated: <DATE>
+verified: <DATE> <TIME>
+---
+## 목표
+문서 정리.
+
+--- 결정 목록 (본문은 decisions.md) ---
+(없음)
+
+위 기록은 확인할 출발점이다. 코드와 다를 수 있으니 의존하기 전에 검증한다. 결정을 확정하거나 단계를 끝내면 바로 decisions.md·state.md·log.md에 기록한다. 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다.

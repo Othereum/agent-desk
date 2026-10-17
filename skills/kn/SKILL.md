@@ -48,7 +48,7 @@ CLI 경로는 `agent-desk:desk` 스킬의 CLI 항목을 따른다.
 adesk kn add --kind pitfall --title "한 문장 제목" \
   --paths "src/auth/**,src/**/SessionCache*.cs" --tags "auth,session" --slug session-cache-reload
 ```
-본문은 생성된 `file`을 scratchpad에 복사해 쓰고 `adesk put <file> --file <사본>`으로 반영한다(데스크 파일은 Edit하지 않는다, `agent-desk:desk` 스킬 "파일별 작성 규칙"). 짧은 본문은 `--body`로 넘겨도 된다. 출처 태스크(`sources`)은 현재 세션의 태스크(브랜치에 연결된 태스크, 없으면 포커스 태스크)으로 자동 기록된다.
+본문은 생성된 `file`을 scratchpad에 복사해 쓰고 `adesk put <file> --file <사본>`으로 반영한다(데스크 파일은 Edit하지 않는다, `agent-desk:desk` 스킬 "파일별 작성 규칙"). 짧은 본문은 `--body`로 넘겨도 된다. 출처 태스크(`sources`)는 이 세션의 포커스 태스크로 자동 기록된다. 서브에이전트나 다른 태스크의 일이면 `--sources <id>`를 명시한다.
 
 본문 규칙:
 - **사실 하나만** 담는다. 둘 이상이면 항목을 나눈다.

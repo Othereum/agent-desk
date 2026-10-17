@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .core import write_text
-from .model import Project, Task, get_focus_id, load_tasks
+from .model import Project, Task, load_tasks
 
 
 def write_index(project: Project) -> Path:
@@ -15,11 +15,8 @@ def write_index(project: Project) -> Path:
     closed = sorted((t for t in tasks if t.archived),
                     key=lambda t: t.meta.get("updated", ""), reverse=True)
 
-    focus_id = (get_focus_id(project) or "").casefold()
-
     def row(t: Task) -> str:
-        status = t.status + (" · 포커스" if not t.archived and t.id.casefold() == focus_id else "")
-        cells = [t.id, t.meta.get("title", ""), status, ", ".join(t.branches),
+        cells = [t.id, t.meta.get("title", ""), t.status, ", ".join(t.branches),
                  t.meta.get("parent", "") or "", t.meta.get("updated", "")]
         return "| " + " | ".join(c.replace("|", "\\|") for c in cells) + " |"
 

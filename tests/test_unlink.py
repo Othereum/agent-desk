@@ -13,6 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "bin"))
 from agent_desk import cli
 from agent_desk.model import check_branch_free, find_task_by_branch, get_project
 
+os.environ.pop("CLAUDE_CODE_SESSION_ID", None)  # tests may run in a Claude Code session: leave its task alone
+
 
 class Unlink(unittest.TestCase):
     def setUp(self):
