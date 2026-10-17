@@ -10,11 +10,13 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bin"))
 
 from agent_desk import cli
+from agent_desk.core import DeskError
 from agent_desk.hooks import parent_context
 from agent_desk.model import check_branch_free, find_task_by_branch, get_focus_task, get_project
 
@@ -106,6 +108,18 @@ class Delete(unittest.TestCase):
         self.assertFalse((self.pdir / "trash" / tid).exists())
         self.assertIn("찾을 수 없습니다", self.fail_with("delete", tid, "--purge"))
         self.assertIn("찾을 수 없습니다", self.fail_with("restore", tid))
+
+    def test_close_again_after_a_failed_move(self):
+        tid = self.new("a")
+        busy = DeskError("폴더를 옮기지 못했습니다(다른 프로그램이 사용 중)")
+        with mock.patch("agent_desk.cli.move_dir", side_effect=busy):
+            self.assertIn("다른 프로그램이 사용 중", self.fail_with("close", tid, "done", "--note", "끝"))
+        # left in tasks/ but closed: no branch matching or session injection treats it as open
+        self.assertEqual([r["status"] for r in self.ok("list") if r["id"] == tid], ["done"])
+        self.ok("close", tid, "done", "--note", "끝")
+        log = (self.pdir / "archive" / tid / "log.md").read_text(encoding="utf-8")
+        self.assertEqual(log.count("태스크 종료: done"), 1)
+        self.assertFalse((self.pdir / "tasks" / tid).exists())
 
     def test_branch_is_freed(self):
         tid = self.ok("new", "--title", "x", "--branch", "feat")["task"]

@@ -46,7 +46,7 @@ class MoveDir(unittest.TestCase):
 
     def test_gives_up_without_leaving_two_copies(self):
         patch, _ = self.refuse(10**6)
-        with patch, mock.patch("time.sleep"):
+        with patch, mock.patch("agent_desk.core.BUSY_WAIT", 0.05):
             with self.assertRaises(DeskError):
                 move_dir(self.src, self.dest)
         self.assertTrue((self.src / "state.md").exists())

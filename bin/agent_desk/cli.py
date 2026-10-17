@@ -217,9 +217,11 @@ def cmd_close(args) -> None:
     dest = project.dir / "archive" / task.id
     if dest.exists():
         raise DeskError(f"아카이브에 같은 ID가 이미 있습니다: {dest}")
-    set_meta(task, {"status": args.result})
-    append_log(task, [f"태스크 종료: {args.result}"] + ([args.note] if args.note else []))
-    dest.parent.mkdir(parents=True, exist_ok=True)
+    # the status is written before the move: when the move fails the task is already out of the
+    # open lists, and running the same close again only finishes the move
+    if task.status != args.result:
+        set_meta(task, {"status": args.result})
+        append_log(task, [f"태스크 종료: {args.result}"] + ([args.note] if args.note else []))
     move_dir(task.dir, dest)
     unfocused = (get_focus_id(project) or "").casefold() == task.id.casefold()
     if unfocused:

@@ -38,6 +38,25 @@ def is_write_temp(name: str) -> bool:
     return name.startswith(".") and name.endswith(".tmp")
 
 
+BUSY_WAIT = 5.0  # seconds: a sync client or an indexer can hold a file for a few seconds
+
+
+def retry_busy(action) -> None:
+    """Run action, retrying while Windows refuses it because another process (a sync client,
+    an indexer, a reader) has the file open (K0047). The wait starts at 10 ms and doubles up to
+    200 ms: a short clash passes quickly, a long one is still waited out up to BUSY_WAIT."""
+    import time
+    deadline, delay = time.monotonic() + BUSY_WAIT, 0.01
+    while True:
+        try:
+            return action()
+        except PermissionError:
+            if time.monotonic() + delay > deadline:
+                raise
+            time.sleep(delay)
+            delay = min(delay * 2, 0.2)
+
+
 def write_text(path: Path, text: str) -> None:
     # write then rename: parallel agents read and write the same data root, and a reader
     # must never see a half-written file (an unreadable state.md drops the task from lists)
@@ -45,34 +64,22 @@ def write_text(path: Path, text: str) -> None:
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     with tmp.open("w", encoding="utf-8", newline="\n") as f:
         f.write(text)
-    for attempt in range(50):
-        try:
-            os.replace(tmp, path)
-            return
-        except PermissionError:  # Windows: another process has the file open for a moment
-            if attempt == 49:
-                tmp.unlink(missing_ok=True)
-                raise
-            import time
-            time.sleep(0.01)
+    try:
+        retry_busy(lambda: os.replace(tmp, path))
+    except PermissionError:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def move_dir(src: Path, dest: Path) -> None:
     """Rename a task folder (tasks/, archive/ and trash/ share one parent, so a rename always works).
-    Windows refuses it while another process (a sync client, an indexer) has a file in the folder
-    open for a moment, so retry; never fall back to copy + delete, which leaves both copies when
-    the delete is refused too."""
+    Never fall back to copy + delete: when the delete is refused too, both copies are left."""
     dest.parent.mkdir(parents=True, exist_ok=True)
-    for attempt in range(100):
-        try:
-            os.rename(src, dest)
-            return
-        except PermissionError as e:
-            if attempt == 99:
-                raise DeskError(f"폴더를 옮기지 못했습니다(다른 프로그램이 사용 중): {src} → {dest}. "
-                                "잠시 뒤 같은 명령을 다시 실행하세요") from e
-            import time
-            time.sleep(0.05)
+    try:
+        retry_busy(lambda: os.rename(src, dest))
+    except PermissionError as e:
+        raise DeskError(f"폴더를 옮기지 못했습니다(다른 프로그램이 사용 중): {src} → {dest}. "
+                        "잠시 뒤 같은 명령을 다시 실행하세요") from e
 
 
 def lock_path(name: str) -> Path:
