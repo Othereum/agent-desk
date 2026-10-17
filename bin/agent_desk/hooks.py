@@ -31,7 +31,6 @@ def decision_titles(task: Task) -> list[str]:
     return [m.group(1) for m in DECISION_LINE.finditer(strip_comments(read_text(path)))]
 
 
-CLI_LINE = "CLI: Bash 도구에서 `adesk ...`로 실행한다."
 RULES_LINE = "태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다."
 
 
@@ -58,7 +57,7 @@ def context_head(root: Path, project: Project, branch: str | None) -> tuple[str,
     if migrate_line := schema_line(root):
         kn_line = f"{kn_line}\n{migrate_line}" if kn_line else migrate_line
     return (f"[agent-desk] 프로젝트 {project.key} · 브랜치 {branch or '(detached)'}",
-            [CLI_LINE] + ([kn_line] if kn_line else []))
+            ([kn_line] if kn_line else []))
 
 
 def candidates_context(root: Path, project: Project, branch: str | None, current: Task | None, agent: bool) -> str:

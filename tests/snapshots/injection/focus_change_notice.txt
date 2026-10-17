@@ -3,7 +3,6 @@
 === SessionStart startup
 [additionalContext SessionStart]
 [agent-desk] 프로젝트 myapp · 브랜치 main · 포커스 없음
-CLI: Bash 도구에서 `adesk ...`로 실행한다.
 
 --- 열린 태스크 ---
 - <YYMMDD>-docs (문서 정리) · in_progress · 브랜치 없음
