@@ -13,7 +13,7 @@ from pathlib import Path
 from .core import (
     CLOSED_STATUSES, DEFAULT_ID_TEMPLATE, DEFAULT_SHARED_BRANCHES, DeskError, LEGACY_STATUSES, OPEN_STATUSES,
     PYTHON_ALIAS_MESSAGE, SCHEMA_VERSION, TASK_FILES, desk_root, ensure_root, now_minute, python_alias,
-    read_text, root_lock, schema_version, today, write_schema_version, write_text,
+    move_dir, read_text, root_lock, schema_version, today, write_schema_version, write_text,
 )
 from .frontmatter import format_scalar, format_value, parse_frontmatter, split_frontmatter, update_frontmatter
 from .gitinfo import is_under, native_path, normalize_path, repo_info
@@ -220,8 +220,7 @@ def cmd_close(args) -> None:
     set_meta(task, {"status": args.result})
     append_log(task, [f"태스크 종료: {args.result}"] + ([args.note] if args.note else []))
     dest.parent.mkdir(parents=True, exist_ok=True)
-    import shutil
-    shutil.move(str(task.dir), str(dest))
+    move_dir(task.dir, dest)
     unfocused = (get_focus_id(project) or "").casefold() == task.id.casefold()
     if unfocused:
         set_focus(project, None)
@@ -240,8 +239,7 @@ def cmd_reopen(args) -> None:
     for b in task.branches:
         check_branch_free(project, b, task.id)
     dest = project.dir / "tasks" / task.id
-    import shutil
-    shutil.move(str(task.dir), str(dest))
+    move_dir(task.dir, dest)
     task.dir, task.archived = dest, False
     set_meta(task, {"status": "in_progress"})
     append_log(task, ["태스크 재개"])
@@ -270,7 +268,7 @@ def cmd_delete(args) -> None:
     set_meta(task, {"trashed": now_minute()})
     append_log(task, [TRASH_LOG_LINE])
     dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(task.dir), str(dest))
+    move_dir(task.dir, dest)
     unfocused = (get_focus_id(project) or "").casefold() == task.id.casefold()
     if unfocused:  # as close does: restoring the task does not bring the focus back
         set_focus(project, None)
@@ -295,9 +293,8 @@ def cmd_restore(args) -> None:
     dest = project.dir / ("archive" if archived else "tasks") / task.id
     if dest.exists():  # a leftover folder without state.md
         raise DeskError(f"같은 이름의 폴더가 이미 있습니다: {dest}")
-    import shutil
     dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(task.dir), str(dest))
+    move_dir(task.dir, dest)
     task.dir, task.archived, task.trashed = dest, archived, False
     set_meta(task, {"trashed": None})
     append_log(task, ["휴지통에서 되살림"])

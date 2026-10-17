@@ -7,12 +7,50 @@ import time
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 BIN = Path(__file__).resolve().parents[1] / "bin"
 sys.path.insert(0, str(BIN))
 
-from agent_desk.core import file_lock, is_write_temp, root_lock, root_lock_name, write_text
+from agent_desk.core import DeskError, file_lock, is_write_temp, move_dir, root_lock, root_lock_name, write_text
+
+
+class MoveDir(unittest.TestCase):
+    """Windows refuses a folder rename while a sync client has a file in it open."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.src = Path(self._tmp.name) / "tasks" / "t1"
+        self.src.mkdir(parents=True)
+        (self.src / "state.md").write_text("x", encoding="utf-8")
+        self.dest = Path(self._tmp.name) / "archive" / "t1"
+        self.addCleanup(self._tmp.cleanup)
+
+    def refuse(self, times):
+        real, calls = os.rename, []
+        def rename(a, b):
+            calls.append(a)
+            if len(calls) <= times:
+                raise PermissionError(5, "access denied")
+            real(a, b)
+        return mock.patch("agent_desk.core.os.rename", rename), calls
+
+    def test_retries_until_the_folder_is_free(self):
+        patch, calls = self.refuse(3)
+        with patch:
+            move_dir(self.src, self.dest)
+        self.assertEqual(len(calls), 4)
+        self.assertFalse(self.src.exists())
+        self.assertTrue((self.dest / "state.md").exists())
+
+    def test_gives_up_without_leaving_two_copies(self):
+        patch, _ = self.refuse(10**6)
+        with patch, mock.patch("time.sleep"):
+            with self.assertRaises(DeskError):
+                move_dir(self.src, self.dest)
+        self.assertTrue((self.src / "state.md").exists())
+        self.assertFalse(self.dest.exists())
 
 
 class WriteText(unittest.TestCase):

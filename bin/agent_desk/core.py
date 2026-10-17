@@ -57,6 +57,24 @@ def write_text(path: Path, text: str) -> None:
             time.sleep(0.01)
 
 
+def move_dir(src: Path, dest: Path) -> None:
+    """Rename a task folder (tasks/, archive/ and trash/ share one parent, so a rename always works).
+    Windows refuses it while another process (a sync client, an indexer) has a file in the folder
+    open for a moment, so retry; never fall back to copy + delete, which leaves both copies when
+    the delete is refused too."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    for attempt in range(100):
+        try:
+            os.rename(src, dest)
+            return
+        except PermissionError as e:
+            if attempt == 99:
+                raise DeskError(f"폴더를 옮기지 못했습니다(다른 프로그램이 사용 중): {src} → {dest}. "
+                                "잠시 뒤 같은 명령을 다시 실행하세요") from e
+            import time
+            time.sleep(0.05)
+
+
 def lock_path(name: str) -> Path:
     import tempfile
     return Path(tempfile.gettempdir()) / "agent-desk-locks" / name
