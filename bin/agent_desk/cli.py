@@ -50,7 +50,7 @@ def cmd_where(args) -> None:
         "task": task.id if task else None,
         "task_source": source or None,
         "task_dir": str(task.dir) if task else None,
-        "focus": get_focus_id(project) if project else None,
+        "focus": (focus.id if (focus := get_focus_task(project)) else None) if project else None,
     })
 
 

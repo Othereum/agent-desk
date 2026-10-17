@@ -128,9 +128,9 @@ class Delete(unittest.TestCase):
     def test_id_collisions(self):
         tid = self.new("a")
         self.ok("delete", tid)
-        err = self.fail_with("new", "--title", "again", "--no-branch", "--slug", "a", "--no-focus")
-        self.assertIn(f"adesk restore {tid}", err)
-        self.assertIn(f"adesk delete {tid} --purge", err)
+        # recreating a deleted task skips the trashed id
+        self.assertEqual(self.new("a"), f"{tid}~2")
+        shutil.rmtree(self.pdir / "tasks" / f"{tid}~2")
         # a task with the same id appeared while it was in the trash
         shutil.copytree(self.pdir / "trash" / tid, self.pdir / "tasks" / tid)
         self.assertIn("이미 있습니다", self.fail_with("restore", tid))

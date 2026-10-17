@@ -232,11 +232,8 @@ def build_id(project: Project, branch: str | None, slug: str | None) -> str:
         raw = f"{d.strftime('%y%m%d')}-{slug}"
     base = sanitize(raw)
     taken = {t.id.casefold() for t in load_tasks(project, include_archive=True)}
-    trashed = {t.id.casefold() for t in load_trash(project)}
-    if base.casefold() in trashed and base.casefold() not in taken:
-        raise DeskError(f"휴지통에 같은 ID의 태스크가 있습니다: {base}. 그 태스크를 되살리려면 adesk restore {base}, "
-                        f"영구히 지우고 새로 만들려면 adesk delete {base} --purge 뒤에 다시 실행하세요")
-    taken |= trashed
+    # a trashed task keeps its ID, so recreating a deleted task gets ~2 rather than an error
+    taken |= {t.id.casefold() for t in load_trash(project)}
     if base.casefold() not in taken:
         return base
     n = 2
