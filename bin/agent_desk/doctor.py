@@ -6,7 +6,7 @@ import datetime as dt
 import re
 from pathlib import Path
 
-from .core import DeskError, OPEN_STATUSES, read_text
+from .core import DeskError, OPEN_STATUSES, is_write_temp, read_text
 from .frontmatter import frontmatter_comments
 from .gitinfo import git, repo_info
 from .model import Project, load_tasks, match_project, stray_files
@@ -112,7 +112,7 @@ def doctor_knowledge(root: Path, project: Project | None, top: Path | None,
         return
     scope = project.key if project else "global"
     for p in base.iterdir():
-        if not p.is_file() or p.name == "index.md":
+        if not p.is_file() or p.name == "index.md" or is_write_temp(p.name):
             continue
         if not KN_FILE_RE.match(p.name):
             issues.append({"level": "warn", "kind": "stray-file", "target": p.as_posix(),

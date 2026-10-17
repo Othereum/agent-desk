@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 .claude-plugin/types/
 .claude/settings.local.json
+.claude/worktrees/

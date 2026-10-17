@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import os
 import tomllib
+from contextlib import contextmanager
 from pathlib import Path
 
 
@@ -32,10 +33,57 @@ def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8-sig")
 
 
+def is_write_temp(name: str) -> bool:
+    """A file write_text is in the middle of writing (or left by a killed process)."""
+    return name.startswith(".") and name.endswith(".tmp")
+
+
 def write_text(path: Path, text: str) -> None:
+    # write then rename: parallel agents read and write the same data root, and a reader
+    # must never see a half-written file (an unreadable state.md drops the task from lists)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="\n") as f:
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    with tmp.open("w", encoding="utf-8", newline="\n") as f:
         f.write(text)
+    for attempt in range(50):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:  # Windows: another process has the file open for a moment
+            if attempt == 49:
+                tmp.unlink(missing_ok=True)
+                raise
+            import time
+            time.sleep(0.01)
+
+
+@contextmanager
+def file_lock(name: str, timeout: float = 10.0, stale: float = 30.0):
+    """Cross-process lock for read-then-write sequences, such as allocating the next ID.
+    The lock file lives in the temp dir, not the data root, so it is never synced."""
+    import tempfile
+    import time
+    path = Path(tempfile.gettempdir()) / "agent-desk-locks" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+            break
+        except FileExistsError:
+            try:
+                if time.time() - path.stat().st_mtime > stale:  # left by a killed process
+                    path.unlink(missing_ok=True)
+                    continue
+            except OSError:
+                continue
+            if time.monotonic() > deadline:
+                raise DeskError(f"다른 adesk 명령이 끝나기를 기다리다 시간이 초과되었습니다(잠금 {path})")
+            time.sleep(0.02)
+    try:
+        yield
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def schema_version(root: Path) -> int | None:

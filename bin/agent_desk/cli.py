@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .core import (
     CLOSED_STATUSES, DEFAULT_ID_TEMPLATE, DEFAULT_SHARED_BRANCHES, DeskError, LEGACY_STATUSES, OPEN_STATUSES,
-    PYTHON_ALIAS_MESSAGE, SCHEMA_VERSION, TASK_FILES, desk_root, ensure_root, now_minute, python_alias,
+    PYTHON_ALIAS_MESSAGE, SCHEMA_VERSION, TASK_FILES, desk_root, ensure_root, file_lock, now_minute, python_alias,
     read_text, schema_version, today, write_schema_version, write_text,
 )
 from .frontmatter import format_scalar, format_value, update_frontmatter
@@ -315,8 +315,6 @@ def cmd_kn_add(args) -> None:
     project, info = (None, repo_info(Path(args.cwd))) if args.is_global else current_project(root, Path(args.cwd), args.project)
     if args.is_global and args.paths:
         raise DeskError("전역 항목에는 --paths 를 쓸 수 없습니다. --tags 로 매칭합니다")
-    entries = load_entries(root, project)
-    entry_id = next_entry_id(entries, "K" if project else "G")
     sources = split_csv(args.sources)
     if not sources and project:
         task, _ = resolve_session_task(project, info.branch)
@@ -324,14 +322,18 @@ def cmd_kn_add(args) -> None:
             sources = [task.id]
     body = args.body or "<!-- 요약: 15줄 이내. 사실 하나만 담고, 근거가 되는 코드 위치(경로:줄)를 포함한다. -->"
     values = {
-        "id": entry_id, "title": format_scalar(args.title), "kind": args.kind,
+        "id": "", "title": format_scalar(args.title), "kind": args.kind,
         "paths": format_value(split_csv(args.paths)), "tags": format_value(split_csv(args.tags)),
         "sources": format_value(sources), "location": format_scalar(args.location),
         "date": today(), "verified": now_minute(), "body": body,
     }
-    name = f"{entry_id}-{sanitize(args.slug)}.md" if args.slug else f"{entry_id}.md"
-    path = kn_dir(root, project) / name
-    write_text(path, render_template(project.lang if project else "ko", "knowledge.md", values))
+    base = kn_dir(root, project)
+    # parallel agents may add entries at once: allocate the ID and create the file under one lock
+    with file_lock(f"kn-{project.key if project else 'global'}"):
+        entry_id = values["id"] = next_entry_id(load_entries(root, project), "K" if project else "G")
+        name = f"{entry_id}-{sanitize(args.slug)}.md" if args.slug else f"{entry_id}.md"
+        path = base / name
+        write_text(path, render_template(project.lang if project else "ko", "knowledge.md", values))
     write_kn_index(root, project)
     out({"id": entry_id, "scope": project.key if project else "global", "file": path.as_posix()})
 

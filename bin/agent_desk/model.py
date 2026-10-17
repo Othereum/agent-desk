@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .core import (
     DEFAULT_ID_TEMPLATE, DEFAULT_SHARED_BRANCHES, DeskError, LEGACY_STATUSES, OPEN_STATUSES, PLUGIN_ROOT, TASK_FILES,
-    now_minute, read_text, today, write_text,
+    is_write_temp, now_minute, read_text, today, write_text,
 )
 from .frontmatter import parse_frontmatter, update_frontmatter
 from .gitinfo import RepoInfo, normalize_path, normalize_remote, repo_info
@@ -308,4 +308,5 @@ def resolve_session_task(project: Project, branch: str | None) -> tuple[Task | N
 
 
 def stray_files(task: Task) -> list[str]:
-    return sorted(p.name for p in task.dir.iterdir() if p.is_file() and p.name not in TASK_FILES)
+    return sorted(p.name for p in task.dir.iterdir()
+                  if p.is_file() and p.name not in TASK_FILES and not is_write_temp(p.name))
