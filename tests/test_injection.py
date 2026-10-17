@@ -2,10 +2,12 @@
 
 Layer 1 (snapshots): every scene builds a throwaway desk (data root, git repository, session
 cache) and runs the real hook entry point (`python bin/desk.py hook <event>`) with a hook
-payload. The output is rendered as readable text and compared with
-tests/snapshots/injection/<scene>.txt. Layer 2 (invariants): every hook call must exit 0 with
-empty stderr and print nothing or one valid hook JSON within the size budget; the context
-kinds have required lines.
+payload. Scenes with a distinct shape render their output as readable text and compare it with
+tests/snapshots/injection/<scene>.txt; the fixture records are one-liners so the snapshot shows
+the lines the hook writes. Variant scenes (compact, clear, focus variants...) keep no snapshot:
+they check only the lines that differ from their base scene. Layer 2 (invariants): every hook
+call must exit 0 with empty stderr and print nothing or one valid hook JSON within the size
+budget; the context kinds have required lines.
 
 When an injection change is intended, regenerate the snapshots and review the diff:
     AGENT_DESK_UPDATE_SNAPSHOTS=1 python -m unittest discover -s tests
@@ -105,20 +107,22 @@ class Desk:
         return json.loads(r.stdout) if r.stdout.strip() else None
 
     def new(self, title: str, *args: str) -> str:
-        return self.cli("new", "--title", title, *args)["task"]
+        """The state.md body is cut to one line: snapshots show what the hook writes."""
+        task_id = self.cli("new", "--title", title, *args)["task"]
+        self.fill_state(task_id, goal=f"{title}.")
+        return task_id
 
     def task_dir(self, task_id: str) -> Path:
         return self.project_dir / "tasks" / task_id
 
     def fill_state(self, task_id: str, **sections: str) -> None:
-        """Write text under state.md sections: goal, now, next, questions."""
-        names = {"goal": "목표", "now": "현재 상태", "next": "다음 할 일", "questions": "미해결 질문"}
+        """Replace the state.md body with the given sections: goal, now, next."""
+        names = {"goal": "목표", "now": "현재 상태", "next": "다음 할 일"}
         path = self.task_dir(task_id) / "state.md"
         text = path.read_text(encoding="utf-8")
-        for key, body in sections.items():
-            heading = f"## {names[key]}\n"
-            text = text.replace(heading, f"{heading}\n{body}\n", 1)
-        path.write_text(text, encoding="utf-8")
+        head = text[:text.index("\n---\n", 4) + 5]
+        body = "".join(f"## {names[k]}\n{v}\n" for k, v in sections.items())
+        path.write_text(head + body, encoding="utf-8")
 
     def add_decision(self, task_id: str, title: str, body: str = "- 결정: (본문)") -> None:
         path = self.task_dir(task_id) / "decisions.md"
@@ -159,6 +163,7 @@ class Desk:
         today = dt.date.today()
         for p in (self.base.as_posix(), str(self.base)):
             text = text.replace(p, "<TMP>")
+        text = re.sub(rf"{today.isoformat()} \d\d:\d\d", "<DATE> <TIME>", text)
         text = text.replace(today.isoformat(), "<DATE>")
         return re.sub(rf"\b{today.strftime('%y%m%d')}-", "<YYMMDD>-", text)
 
@@ -188,7 +193,7 @@ def tearDownModule():
 
 
 EVENT_NAMES = {"session-start": "SessionStart", "user-prompt-submit": "UserPromptSubmit",
-               "post-tool-use": "PostToolUse"}
+               "pre-tool-use": "PreToolUse", "post-tool-use": "PostToolUse"}
 
 
 class InjectionTest(unittest.TestCase):
@@ -222,7 +227,14 @@ class InjectionTest(unittest.TestCase):
                 self.assertIsInstance(data["systemMessage"], str)
                 rendered.append(f"[systemMessage] {data['systemMessage']}")
             self.assertEqual(expect_failure, "systemMessage" in data and "실패" in data["systemMessage"], label)
-            if "hookSpecificOutput" in data:
+            if "hookSpecificOutput" in data and event == "pre-tool-use":
+                hso = data["hookSpecificOutput"]
+                reason = hso.get("permissionDecisionReason")
+                self.assertEqual(hso, {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                       "permissionDecisionReason": reason}, label)
+                self.assertTrue(isinstance(reason, str) and reason.strip(), label)
+                rendered += ["[deny PreToolUse]", reason]
+            elif "hookSpecificOutput" in data:
                 hso = data["hookSpecificOutput"]
                 expected_event = EVENT_NAMES[event]
                 self.assertEqual(hso.get("hookEventName"), expected_event, label)
@@ -261,7 +273,18 @@ class InjectionTest(unittest.TestCase):
         self.assertEqual(len(items), len(set(items)), "duplicate entries")
         return [l.split()[1] for l in items]
 
-    # --- layer 1: snapshot ------------------------------------------------------------------
+    # --- layer 1: snapshot, or the difference from a base scene ------------------------------
+
+    def assert_differs(self, base: str, ctx: str, added: list[str], removed: list[str] = ()) -> None:
+        """Every line ctx adds to base starts with one of `added` and each prefix matches one;
+        the same for the lines it drops and `removed`."""
+        base_lines, lines = base.splitlines(), ctx.splitlines()
+        for got, prefixes, what in (([l for l in lines if l not in base_lines], added, "추가된 줄"),
+                                    ([l for l in base_lines if l not in lines], removed, "빠진 줄")):
+            for line in got:
+                self.assertTrue(any(line.startswith(p) for p in prefixes), f"{what}: {line!r}")
+            for prefix in prefixes:
+                self.assertTrue(any(l.startswith(prefix) for l in got), f"{what} 없음: {prefix!r}")
 
     def snapshot(self, name: str, description: str) -> None:
         text = f"# {description}\n\n" + "\n\n".join(self.calls) + "\n"
@@ -282,8 +305,7 @@ class InjectionTest(unittest.TestCase):
         d = self.desk
         d.checkout("-b", "feature/login")
         tid = d.new("로그인 기능")
-        d.fill_state(tid, goal="로그인 기능을 만든다.", now="- 로그인 API 완료.",
-                     next="- 토큰 갱신", questions="- 없음")
+        d.fill_state(tid, goal="로그인 기능을 만든다.", now="- 로그인 API 완료.", next="- 토큰 갱신")
         d.add_decision(tid, "세션 캐시는 Redis에 둔다")
         return tid
 
@@ -325,19 +347,14 @@ class InjectionTest(unittest.TestCase):
         self.snapshot("branch_task_startup",
                       "브랜치 태스크의 현황·결정 목록을 주입한다 (README 다음 날 이어서, 낡은 지식 점검 제안)")
 
-    def test_branch_task_compact(self):
+    def test_branch_task_compact_and_clear(self):
         tid = self.login_task()
+        base = self.call("SessionStart startup", "session-start", {"source": "startup"})
         ctx = self.call("SessionStart compact", "session-start", {"source": "compact"})
         self.assert_task_context(ctx, tid)
-        self.assertIn("컨텍스트가 방금 압축되었다.", ctx)
-        self.snapshot("branch_task_compact", "압축 뒤에는 기록 보완을 지시한다 (K0009)")
-
-    def test_branch_task_clear(self):
-        tid = self.login_task()
+        self.assert_differs(base, ctx, added=["컨텍스트가 방금 압축되었다."])  # K0009
         ctx = self.call("SessionStart clear", "session-start", {"source": "clear"})
-        self.assert_task_context(ctx, tid)
-        self.assertNotIn("압축", ctx)
-        self.snapshot("branch_task_clear", "clear 뒤에도 태스크 맥락을 다시 주입한다")
+        self.assertEqual(ctx, base)  # clear injects the task again, as at startup
 
     def test_todo_branch_task(self):
         d = self.desk
@@ -345,8 +362,10 @@ class InjectionTest(unittest.TestCase):
         tid = d.new("검색 개선", "--todo")
         ctx = self.call("SessionStart startup", "session-start", {"source": "startup"})
         self.assert_task_context(ctx, tid)
-        self.assertIn("착수 전(todo)", ctx)
-        self.snapshot("todo_branch_task", "착수 전(todo) 태스크면 시작할 때 상태를 바꾸라고 안내한다")
+        d.cli("status", tid, "in_progress")
+        base = self.call("SessionStart startup (진행 중)", "session-start", {"source": "startup"})
+        self.assert_differs(base, ctx, added=["[agent-desk] 프로젝트 myapp", "status: todo", "이 태스크는 착수 전(todo)이다."],
+                            removed=["[agent-desk] 프로젝트 myapp", "status: in_progress"])
 
     def test_focus_on_shared_branch(self):
         d = self.desk
@@ -360,21 +379,23 @@ class InjectionTest(unittest.TestCase):
     def test_focus_on_unlinked_branch(self):
         d = self.desk
         tid = d.new("문서 정리", "--no-branch", "--slug", "docs")
+        base = self.call("SessionStart startup (main, 포커스)", "session-start", {"source": "startup"})
         d.checkout("-b", "feature/misc")
         ctx = self.call("SessionStart startup (태스크 없는 브랜치, 포커스)", "session-start", {"source": "startup"})
         self.assert_task_context(ctx, tid)
-        self.assertIn("이 브랜치(feature/misc)에는 연결된 태스크가 없어 포커스 태스크를 표시한다", ctx)
-        self.snapshot("focus_on_unlinked_branch", "태스크 없는 개인 브랜치에서 포커스를 보이면 관련 여부를 확인하라고 한다")
+        self.assert_differs(base, ctx, added=["[agent-desk] 프로젝트 myapp · 브랜치 feature/misc",
+                                              "이 브랜치(feature/misc)에는 연결된 태스크가 없어 포커스 태스크를 표시한다"],
+                            removed=["[agent-desk] 프로젝트 myapp · 브랜치 main"])
 
     def test_focus_differs_from_branch_task(self):
         d = self.desk
-        d.new("문서 정리", "--no-branch", "--slug", "docs")
         tid = self.login_task()
+        base = self.call("SessionStart startup (브랜치 태스크)", "session-start", {"source": "startup"})
+        d.cli("focus", d.new("문서 정리", "--no-branch", "--slug", "docs"))
         ctx = self.call("SessionStart startup (브랜치 태스크 + 다른 포커스)", "session-start", {"source": "startup"})
         self.assert_task_context(ctx, tid)
-        self.assertIn("포커스 태스크는 <YYMMDD>-docs(문서 정리)로", d.normalize(ctx))
-        self.assertIn("다른 열린 태스크 1건:", ctx)
-        self.snapshot("focus_differs_from_branch_task", "브랜치 태스크와 별개인 포커스가 있으면 알린다")
+        self.assert_differs(d.normalize(base), d.normalize(ctx),
+                            added=["포커스 태스크는 <YYMMDD>-docs(문서 정리)로", "다른 열린 태스크 1건:"])
 
     def test_subtask_with_parent(self):
         d = self.desk
@@ -395,12 +416,12 @@ class InjectionTest(unittest.TestCase):
     def test_parent_via_focus(self):
         d = self.desk
         parent = d.new("1.0 준비", "--no-branch", "--slug", "v1")
+        base = self.call("SessionStart startup (main, 포커스)", "session-start", {"source": "startup"})
         d.new("문서 정리", "--no-branch", "--slug", "docs", "--parent", parent, "--todo")
         d.new("로그인 기능", "--branch", "feature/login", "--parent", parent)
         ctx = self.call("SessionStart startup (main, 상위 태스크 포커스)", "session-start", {"source": "startup"})
         self.assert_task_context(ctx, parent)
-        self.assertIn("다른 열린 태스크 2건(하위 2건):", ctx)
-        self.snapshot("parent_via_focus", "상위 태스크 세션은 하위 태스크 건수만 한 줄로 알린다 (K0041)")
+        self.assert_differs(base, ctx, added=["다른 열린 태스크 2건(하위 2건):"])  # K0041
 
     def test_location_change_prompt(self):
         tid = self.login_task()
@@ -476,36 +497,43 @@ class InjectionTest(unittest.TestCase):
                       "파일 접근 시 paths가 맞는 지식 제목을 함정부터 15건까지 한 번씩 주입한다 "
                       "(README 함정을 발견하면 지식으로, K0036, K0039)")
 
-    def test_desk_record_check(self):
+    def test_desk_file_edit(self):
         d = self.desk
         tid = d.new("로그인 기능", "--branch", "feature/login")
         state = d.task_dir(tid) / "state.md"
         edit = {"tool_name": "Edit", "tool_input": {"file_path": str(state)}}
+        self.call("PreToolUse Edit state.md (차단)", "pre-tool-use", edit)
+        self.assertIsNone(self.call("PreToolUse Read state.md", "pre-tool-use",
+                                    {"tool_name": "Read", "tool_input": {"file_path": str(state)}}))
+        self.assertIsNone(self.call("PreToolUse Edit README.md", "pre-tool-use",
+                                    {"tool_name": "Edit", "tool_input": {"file_path": str(d.repo / "README.md")}}))
         self.assertIsNone(self.call("PostToolUse Edit state.md (정상)", "post-tool-use", edit))
         state.write_text(state.read_text(encoding="utf-8").replace("title: 로그인 기능", 'title: "로그인'),
                          encoding="utf-8")
         ctx = self.call("PostToolUse Edit state.md (frontmatter 깨짐)", "post-tool-use", edit)
         self.assertIn("frontmatter를 읽을 수 없다", ctx)
-        self.snapshot("desk_record_check", "데이터 루트의 기록 파일을 고친 뒤 frontmatter가 깨졌으면 알린다")
+        self.snapshot("desk_file_edit", "데이터 폴더 파일의 Edit/Write를 막고 put·append를 안내한다. "
+                                        "기록 파일의 frontmatter가 깨졌으면 알린다 (desk-rewind D1)")
 
     def test_old_schema(self):
         d = self.desk
         d.new("문서 정리", "--no-branch", "--slug", "docs")
+        base = self.call("SessionStart startup", "session-start", {"source": "startup"})
         (d.root / "desk.toml").write_text("schema_version = 1\n", encoding="utf-8")
         ctx = self.call("SessionStart startup (스키마 1)", "session-start", {"source": "startup"})
-        self.assertIn("`adesk migrate`", ctx)
-        self.snapshot("old_schema", "데이터가 이전 형식이면 migrate를 제안하게 한다 (K0042)")
+        self.assertIn("`adesk migrate`", ctx)  # K0042
+        self.assert_differs(base, ctx, added=[next(l for l in ctx.splitlines() if "`adesk migrate`" in l)])
 
     def test_doctor_reminder(self):
         d = self.desk
         d.add_knowledge(1, "항목", "pitfall", ["src/**"])
+        d.set_doctor_age(1)
+        base = self.call("SessionStart startup (doctor 1일 전)", "session-start", {"source": "startup"})
+        self.assertNotIn("doctor를", base)
         d.set_doctor_age(10)
         ctx = self.call("SessionStart startup (doctor 10일 전)", "session-start", {"source": "startup"})
         self.assertIn("doctor를 10일째 실행하지 않았다", ctx)
-        d.set_doctor_age(1)
-        ctx = self.call("SessionStart startup (doctor 1일 전)", "session-start", {"source": "startup"})
-        self.assertNotIn("doctor를", ctx)
-        self.snapshot("doctor_reminder", "doctor를 오래 실행하지 않았으면 제안하게 한다 (README 낡은 지식 점검)")
+        self.assert_differs(base, ctx, added=[next(l for l in ctx.splitlines() if "doctor를 10일째" in l)])
 
     def test_hook_failure(self):
         d = self.desk

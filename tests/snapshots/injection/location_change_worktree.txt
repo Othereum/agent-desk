@@ -31,19 +31,10 @@ parent:
 related: []
 created: <DATE>
 updated: <DATE>
-verified: <DATE>
+verified: <DATE> <TIME>
 ---
 ## 목표
-
-## 현재 상태
-
-## 다음 할 일
-
-## 미해결 질문
-
-## 핵심 파일
-
-## 관련 지식
+로그인 기능.
 
 --- 결정 목록 (본문은 decisions.md) ---
 (없음)
@@ -82,19 +73,10 @@ parent:
 related: []
 created: <DATE>
 updated: <DATE>
-verified: <DATE>
+verified: <DATE> <TIME>
 ---
 ## 목표
-
-## 현재 상태
-
-## 다음 할 일
-
-## 미해결 질문
-
-## 핵심 파일
-
-## 관련 지식
+로그인 기능.
 
 --- 결정 목록 (본문은 decisions.md) ---
 (없음)

@@ -34,27 +34,14 @@ parent:
 related: []
 created: <DATE>
 updated: <DATE>
-verified: <DATE>
+verified: <DATE> <TIME>
 ---
 ## 목표
-
 로그인 기능을 만든다.
-
 ## 현재 상태
-
 - 로그인 API 완료.
-
 ## 다음 할 일
-
 - 토큰 갱신
-
-## 미해결 질문
-
-- 없음
-
-## 핵심 파일
-
-## 관련 지식
 
 --- 결정 목록 (본문은 decisions.md) ---
 - D1. 세션 캐시는 Redis에 둔다  (2026-01-01, 유효)

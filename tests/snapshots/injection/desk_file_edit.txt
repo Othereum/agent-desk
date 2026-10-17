@@ -1,0 +1,18 @@
+# 데이터 폴더 파일의 Edit/Write를 막고 put·append를 안내한다. 기록 파일의 frontmatter가 깨졌으면 알린다 (desk-rewind D1)
+
+=== PreToolUse Edit state.md (차단)
+[deny PreToolUse]
+[agent-desk] 데이터 폴더는 Edit/Write로 고치지 않는다. 파일을 scratchpad에 복사해 고친 뒤 `adesk put <경로> --file <사본>`(전체 교체), 덧붙일 때는 `adesk append <경로> --file <파일>`로 반영할 것.
+
+=== PreToolUse Read state.md
+(출력 없음)
+
+=== PreToolUse Edit README.md
+(출력 없음)
+
+=== PostToolUse Edit state.md (정상)
+(출력 없음)
+
+=== PostToolUse Edit state.md (frontmatter 깨짐)
+[additionalContext PostToolUse]
+[agent-desk] 방금 수정한 <TMP>/desk/projects/myapp/tasks/<YYMMDD>-feature__login/state.md 의 frontmatter를 읽을 수 없다: frontmatter 3번째 줄: 따옴표가 닫히지 않았습니다: title: "로그인. 사본을 고쳐 `adesk put` 으로 바로잡을 것(agent-desk:desk 스킬 "파일별 작성 규칙").
