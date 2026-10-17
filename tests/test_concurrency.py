@@ -52,7 +52,8 @@ class ParallelKnAdd(unittest.TestCase):
                                       env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
                      for i in range(6)]
             for p in procs:
-                self.assertEqual(p.wait(), 0, p.stderr.read().decode("utf-8", "replace"))
+                _, err = p.communicate()  # closes the pipe, or unittest warns about it
+                self.assertEqual(p.returncode, 0, err.decode("utf-8", "replace"))
             ids = [f.name.split("-")[0] for f in (root / "projects" / "p" / "knowledge").glob("K*.md")]
             self.assertEqual(sorted(ids), [f"K{i:04d}" for i in range(1, 7)])
 
