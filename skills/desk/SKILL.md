@@ -42,6 +42,7 @@ adesk relate <id> [--parent P | --no-parent] [--add a,b] [--remove a,b]
 adesk focus [<id> | --clear]            # 포커스 태스크 조회·지정·해제
 adesk new --title "제목" --no-branch --slug x --todo   # 예정 태스크로 생성 (포커스 안 됨)
 adesk status <id> todo|in_progress|on_hold
+adesk set <id> [--title "제목"] [--design-doc URL] [--add-link URL] [--remove-link URL]
 adesk close <id> done|cancelled [--note "..."]
 adesk reopen <id>
 adesk delete <id>                       # 휴지통으로 옮기기 (열린·종료된 태스크 모두)
@@ -49,13 +50,17 @@ adesk restore <id>                      # 휴지통에서 되살리기 (상태�
 adesk delete <id> --purge               # 휴지통의 태스크를 영구 삭제
 adesk list --deleted                    # 휴지통의 태스크 목록
 adesk index                             # 태스크·knowledge index.md 재생성
-adesk kn search|show|list|add|supersede|retire|delete|verify|stale ...   # knowledge (agent-desk:kn 스킬)
+adesk put <데스크 파일> --file <파일|-> [--verified]   # 본문 교체 (frontmatter는 현재 값 유지)
+adesk append <데스크 파일> --file <파일|->   # 끝에 덧붙이기
+adesk kn search|show|list|add|set|supersede|retire|delete|verify|stale ...   # knowledge (agent-desk:kn 스킬)
 adesk doctor [--apply]                  # 낡은 knowledge·충돌 사본·방치된 태스크 점검 (agent-desk:kn 스킬)
 adesk migrate [--dry-run]               # 데이터 폴더를 현재 스키마로 변환
 ```
 `--project KEY`와 `--cwd DIR`은 하위 명령 **앞에** 둔다. 출력은 JSON이다.
 
 ID 생성, 브랜치 중복 검사, 상태 전환, 아카이브·휴지통 이동은 반드시 CLI로 한다. 폴더를 직접 만들거나 옮기거나 지우지 않는다.
+
+**frontmatter는 CLI가 쓰고, 글(본문, log.md, decisions.md)은 에이전트가 쓴다.** frontmatter 값은 전용 명령으로 바꾼다: 태스크의 제목·설계 문서·링크는 `set`, 상태는 `status`·`close`, 브랜치는 `link`, 상위·연관 태스크는 `relate`, knowledge는 `kn edit`(제목·paths·tags·kind·location)과 `kn verify` 등. `updated`는 CLI가 태스크 파일을 쓸 때 자동으로 바뀐다.
 
 ## 저장 구조
 
@@ -111,21 +116,25 @@ ID 생성, 브랜치 중복 검사, 상태 전환, 아카이브·휴지통 이�
 
 ## 파일별 작성 규칙
 
-모든 파일은 UTF-8(BOM 없음), LF로 저장한다. 파일 편집은 Edit 도구로 직접 한다.
+데스크 파일은 Edit/Write 도구로 고치지 않는다(hook이 거부한다). rewind(Restore code)는 Edit/Write로 바꾼 것만 되돌리고 CLI로 바꾼 것은 남겨서, 섞어 쓰면 데스크가 어긋난다. 내용은 scratchpad(없으면 작업 디렉터리 밖 임시 폴더)에서 만들고 CLI로 반영한다. sed 등으로 직접 고치지 않는다(조용히 실패할 수 있다).
+- 고치기(state.md, decisions.md의 기존 항목, knowledge 본문): 데스크 파일을 scratchpad에 `cp`로 복사하고, 사본을 Read·Edit한 뒤 `adesk put <데스크 파일> --file <사본>`. put은 frontmatter 전체를 현재 파일 값으로 유지하므로(사본에는 본문만 있어도 된다) 사본의 frontmatter를 고쳐도 반영되지 않는다. 사본과 달랐던 키는 출력의 `kept`로 알린다.
+- 덧붙이기(log.md 항목, decisions.md의 새 결정): 덧붙일 부분만 scratchpad 파일에 Write하고 `adesk append <데스크 파일> --file <파일>`. 짧으면 `--file -`와 heredoc으로 표준 입력에 넘겨도 된다.
+- 데스크 파일 경로는 절대 경로나 데이터 폴더 기준 상대 경로(`projects/<KEY>/tasks/<id>/state.md`)로 쓴다. 새 파일은 만들지 않는다(태스크와 knowledge 파일은 `new`·`kn add`가 만든다).
 
-frontmatter(state.md, knowledge 항목)는 YAML의 일부만 읽는다. 맨 앞 열의 `key: 값`과 목록(`[a, "b, c"]`, 또는 빈 `key:` 아래 `  - 항목`)만 쓴다. `#`나 `: `가 들어간 값은 따옴표로 감싼다. 줄 끝 주석(`  # 설명`)은 쓸 수 있다. 중첩 구조, 여러 줄 값(`|`, `>`)은 오류가 되어 그 태스크가 목록에서 빠지므로 쓰지 않는다. 고친 직후 hook이 오류를 알려 주면 바로 고친다.
+모든 파일은 UTF-8(BOM 없음), LF로 저장한다(put·append가 BOM과 CRLF를 정리한다).
+
+CLI 인자로 넘기는 값은 CLI가 따옴표를 붙여 쓰니 그대로 넘긴다. 쉼표로 구분하는 목록(`--paths`, `--tags`, `--related`)의 항목에는 쉼표를 넣을 수 없다. 현재 파일의 frontmatter를 읽을 수 없을 때만 put이 사본의 frontmatter를 쓴다(고치는 경우). 이때는 맨 앞 열의 `key: 값`과 한 줄 목록(`[a, "b, c"]`)으로 쓰고, `#`나 `: `가 들어간 값은 따옴표로 감싼다.
 
 ### state.md (현황, 덮어씀)
 - 세션 시작 시 이것만 읽어도 이어서 작업할 수 있게 쓴다. **60줄 이내**를 유지하고, 넘으면 지난 내용을 log.md로 옮긴다.
 - 섹션: 목표 / 현재 상태 / 다음 할 일 / 미해결 질문 / 핵심 파일(`경로:줄 — 역할`) / 관련 지식(`- K0012 제목`).
-- frontmatter의 `design_doc`에는 Claude Docs 설계 문서 URL을 둔다(아래 "문서 위치 기준").
-- frontmatter의 `parent`, `related`는 직접 고치지 말고 `relate` 명령으로 바꾼다(한 단계 제한과 ID 검증을 위해).
-- 갱신할 때 frontmatter의 `updated`를 오늘 날짜로 바꾼다. 내용을 코드와 대조해 확인했다면 `verified`도 바꾼다.
+- Claude Docs 설계 문서 URL은 `set <id> --design-doc <URL>`로, 이슈·PR 등 링크는 `set <id> --add-link <URL>`로 둔다(아래 "문서 위치 기준").
+- 내용을 코드와 대조해 확인했다면 `put --verified`로 반영한다(`verified` 갱신).
 - 커밋 해시는 적지 않는다(rebase로 바뀐다). 브랜치명과 커밋 메시지로 가리킨다.
 
 ### decisions.md (결정, 항목 추가)
 - 사용자와 방향을 확정한 **즉시** 기록한다. 나중으로 미루지 않는다.
-- 형식: `## Dn. 제목  (YYYY-MM-DD, 유효)` 아래에 결정 / 이유 / 기각한 대안 / 영향 범위.
+- 형식: `## Dn. 제목  (YYYY-MM-DD, 유효)` 아래에 결정 / 이유 / 기각한 대안 / 영향 범위. 세션 주입이 이 머리 줄로 결정 목록을 만든다. put·append가 형식이 어긋나거나 번호가 빠지거나 겹치면 출력의 `warnings`로 알리니 고친다.
 - 결정이 바뀌면 기존 항목을 지우지 않는다. 상태를 `대체됨 → Dm`으로 바꾸고 새 항목을 추가한다.
 - 기각한 대안과 그 이유를 꼭 남긴다. 같은 논의를 반복하지 않게 하는 핵심 정보다.
 

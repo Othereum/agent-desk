@@ -16,4 +16,5 @@ CLI 실행 방법(`adesk`)은 `agent-desk:desk` 스킬의 CLI 항목을 따른�
    ```
    adesk project-init <KEY> --id-template "<규칙>" --shared "main,master"
    ```
-4. 출력된 `project.toml` 내용을 사용자에게 보여 준다. 원격 URL과 로컬 경로가 자동으로 기록되며, 다른 PC의 경로는 `paths`에 수동으로 추가할 수 있다고 알린다.
+4. 출력된 `project.toml` 내용을 사용자에게 보여 준다. 원격 URL과 로컬 경로가 자동으로 기록되며, 다른 PC의 경로는 `paths`에 추가할 수 있다고 알린다(요청하면 사본을 고쳐 `adesk put`으로 반영, `agent-desk:desk` 스킬 "파일별 작성 규칙").
+5. 데이터 폴더(`adesk where`의 `root`)를 사용자 설정(`~/.claude/settings.json`)의 `permissions.additionalDirectories`에 넣으면 기록을 읽을 때 권한 확인이 줄어든다고 한 줄로 안내한다. 이미 들어 있으면 생략한다.

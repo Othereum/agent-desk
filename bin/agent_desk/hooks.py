@@ -1,4 +1,4 @@
-"""Claude Code hook entry points: SessionStart, UserPromptSubmit, PostToolUse."""
+"""Claude Code hook entry points: SessionStart, UserPromptSubmit, PreToolUse, PostToolUse."""
 
 from __future__ import annotations
 
@@ -15,10 +15,10 @@ from .core import (
     DeskError, OPEN_STATUSES, PYTHON_ALIAS_MESSAGE, SCHEMA_VERSION, desk_root, python_alias, read_text, schema_version,
 )
 from .frontmatter import parse_frontmatter
-from .gitinfo import RepoInfo, git, normalize_path, repo_info
+from .gitinfo import RepoInfo, git, is_under, native_path, normalize_path, repo_info
 from .model import (
-    Project, Task, get_focus_task, get_task, head_branch, load_tasks, match_project, projects_dir,
-    resolve_session_task, stray_files, task_list_field,
+    DECISION_LINE, Project, Task, get_focus_task, get_task, head_branch, load_tasks, match_project, projects_dir,
+    resolve_session_task, strip_comments, stray_files, task_list_field,
 )
 from .knowledge import glob_prefix, glob_regex, inject_order, kn_dir, load_entries, repo_relative
 from .doctor import DOCTOR_MARKER, DOCTOR_REMIND_DAYS
@@ -28,8 +28,7 @@ def decision_titles(task: Task) -> list[str]:
     path = task.dir / "decisions.md"
     if not path.exists():
         return []
-    text = re.sub(r"<!--.*?-->", "", read_text(path), flags=re.S)
-    return [m.group(1) for m in re.finditer(r"^## (D\d+\..*)$", text, re.M)]
+    return [m.group(1) for m in DECISION_LINE.finditer(strip_comments(read_text(path)))]
 
 
 def session_start_context(payload: dict) -> str | None:
@@ -347,27 +346,51 @@ def desk_file_check(root: Path, path: Path) -> str | None:
     error to inject otherwise. None for any other file."""
     is_record = path.name == "state.md" or (path.parent.name == "knowledge" and path.suffix == ".md"
                                             and path.name != "index.md")
-    if not is_record or not normalize_path(path).startswith(normalize_path(root) + "/"):
+    if not is_record or not is_under(root, path):
         return None
     try:
         parse_frontmatter(read_text(path))
     except (DeskError, OSError) as e:
         return (f"[agent-desk] 방금 수정한 {path.as_posix()} 의 frontmatter를 읽을 수 없다: {e}. "
-                "agent-desk:desk 스킬의 frontmatter 형식에 맞게 고칠 것.")
+                "사본을 고쳐 `adesk put` 으로 바로잡을 것(agent-desk:desk 스킬 \"파일별 작성 규칙\").")
     return ""
+
+
+def tool_file_path(payload: dict) -> Path | None:
+    """The absolute file path a file tool call targets, None for a call without one."""
+    tool_input = payload.get("tool_input") or {}
+    file_path = tool_input.get("file_path") or tool_input.get("notebook_path")
+    if not file_path or not isinstance(file_path, str):
+        return None
+    path = Path(native_path(file_path))
+    if not path.is_absolute():
+        path = Path(payload.get("cwd") or os.getcwd()) / path
+    return path
+
+
+DESK_EDIT_DENIED = ("[agent-desk] 데이터 폴더는 Edit/Write로 고치지 않는다. 파일을 scratchpad에 복사해 고친 뒤 "
+                    "`adesk put <경로> --file <사본>`(전체 교체), 덧붙일 때는 `adesk append <경로> --file <파일>`로 반영할 것.")
+
+
+def pre_tool_use_decision(payload: dict) -> str | None:
+    """The reason to deny an Edit/Write/NotebookEdit of a file in the data root, None to allow.
+
+    rewind (Restore code) reverts Edit/Write changes but not the CLI's, so editing the desk with
+    the file tools could leave it half reverted. Writes go through `adesk put`/`append` instead."""
+    if payload.get("tool_name") not in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
+        return None
+    path = tool_file_path(payload)
+    return DESK_EDIT_DENIED if path and is_under(desk_root(), path) else None
 
 
 def post_tool_use_context(payload: dict) -> str | None:
     root = desk_root()
     if not (root / "projects").is_dir():
         return None
-    tool_input = payload.get("tool_input") or {}
-    file_path = tool_input.get("file_path") or tool_input.get("notebook_path")
-    if not file_path:
+    path = tool_file_path(payload)
+    if not path:
         return None
-    path = Path(file_path)
-    if not path.is_absolute():
-        path = Path(payload.get("cwd") or os.getcwd()) / path
+    # PreToolUse denies these edits; this check still catches one made while that hook failed
     if payload.get("tool_name") in ("Edit", "Write", "MultiEdit"):
         checked = desk_file_check(root, path)
         if checked is not None:
@@ -456,11 +479,12 @@ def location_change_context(payload: dict, tool_switch: bool) -> str | None:
     return "\n".join(lines)
 
 
-def cmd_hook(event: str) -> None:
+def cmd_hook(name: str) -> None:
+    event = name  # becomes the hookEventName of the output
     try:
         raw = sys.stdin.read()
         payload = json.loads(raw) if raw.strip() else {}
-        if event == "session-start":
+        if name == "session-start":
             sid = payload.get("session_id")
             if payload.get("source") in ("compact", "clear"):
                 reset_shown(sid)
@@ -471,7 +495,14 @@ def cmd_hook(event: str) -> None:
                 session = load_session(sid)
                 session["location"] = current_location(payload)
                 save_session(sid, session)
-        elif event == "user-prompt-submit":
+        elif name == "pre-tool-use":
+            reason = pre_tool_use_decision(payload)
+            if reason:
+                print(json.dumps({"hookSpecificOutput": {
+                    "hookEventName": "PreToolUse", "permissionDecision": "deny",
+                    "permissionDecisionReason": reason}}, ensure_ascii=False))
+            return
+        elif name == "user-prompt-submit":
             context, event = location_change_context(payload, tool_switch=False), "UserPromptSubmit"
         elif payload.get("tool_name") in ("EnterWorktree", "ExitWorktree"):
             context, event = location_change_context(payload, tool_switch=True), "PostToolUse"
@@ -488,4 +519,4 @@ def cmd_hook(event: str) -> None:
             print(json.dumps(output))
     except Exception as e:  # a hook must never break the session
         from . import hook_failure
-        hook_failure(event, e)
+        hook_failure(name, e)

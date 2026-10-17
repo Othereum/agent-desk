@@ -57,33 +57,64 @@ def write_text(path: Path, text: str) -> None:
             time.sleep(0.01)
 
 
+def lock_path(name: str) -> Path:
+    import tempfile
+    return Path(tempfile.gettempdir()) / "agent-desk-locks" / name
+
+
 @contextmanager
 def file_lock(name: str, timeout: float = 10.0, stale: float = 30.0):
-    """Cross-process lock for read-then-write sequences, such as allocating the next ID.
-    The lock file lives in the temp dir, not the data root, so it is never synced."""
-    import tempfile
+    """Cross-process lock for read-then-write sequences. The lock file lives in the temp dir,
+    not the data root, so it is never synced. While held, its mtime is refreshed so a long
+    command is not taken for a killed one."""
+    import threading
     import time
-    path = Path(tempfile.gettempdir()) / "agent-desk-locks" / name
+    path = lock_path(name)
     path.parent.mkdir(parents=True, exist_ok=True)
     deadline = time.monotonic() + timeout
     while True:
         try:
             os.close(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
             break
-        except FileExistsError:
+        except (FileExistsError, PermissionError):  # Windows: PermissionError while the holder's unlink is pending
             try:
                 if time.time() - path.stat().st_mtime > stale:  # left by a killed process
                     path.unlink(missing_ok=True)
                     continue
             except OSError:
-                continue
+                pass  # gone or being deleted meanwhile: try again after the wait, within the deadline
             if time.monotonic() > deadline:
                 raise DeskError(f"다른 adesk 명령이 끝나기를 기다리다 시간이 초과되었습니다(잠금 {path})")
             time.sleep(0.02)
+    done = threading.Event()
+
+    def heartbeat():
+        while not done.wait(stale / 3):
+            try:
+                os.utime(path)
+            except OSError:
+                pass
+
+    beat = threading.Thread(target=heartbeat, daemon=True)
+    beat.start()
     try:
         yield
     finally:
+        done.set()
+        beat.join()
         path.unlink(missing_ok=True)
+
+
+def root_lock_name(root: Path) -> str:
+    """One lock per data root: tests with their own AGENT_DESK_ROOT never wait for each other."""
+    import hashlib
+    key = os.path.normcase(os.path.abspath(root))
+    return "root-" + hashlib.sha1(key.encode("utf-8")).hexdigest()[:16]
+
+
+def root_lock(root: Path):
+    """Held by every CLI command that changes the data root, for the whole command (K0044)."""
+    return file_lock(root_lock_name(root), timeout=60.0)
 
 
 def schema_version(root: Path) -> int | None:

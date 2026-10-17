@@ -272,6 +272,65 @@ def set_meta(task: Task, updates: dict) -> None:
         del task.meta[k]
 
 
+def task_dir_of(path: Path) -> Path | None:
+    """The task folder a task file (state.md, decisions.md, log.md) belongs to, None otherwise."""
+    d = path.parent
+    if path.name in TASK_FILES and d.parent.name in ("tasks", "archive") and (d / "state.md").is_file():
+        return d
+    return None
+
+
+def touch_task(task_dir: Path) -> bool:
+    """Set the task's `updated` to today after the CLI wrote one of its files. False when its
+    state.md frontmatter cannot be read (then it is left as it is)."""
+    state = task_dir / "state.md"
+    try:
+        text = read_text(state)
+        if parse_frontmatter(text).get("updated") == today():
+            return True
+        write_text(state, update_frontmatter(text, {"updated": today()}))
+    except (DeskError, OSError):
+        return False
+    return True
+
+
+# Decision headings: the one line of agent-written text the CLI reads (session injection lists
+# them), so writes of decisions.md check them (K0045). Examples inside <!-- --> are not entries.
+DECISION_LINE = re.compile(r"^## (D\d+\..*)$", re.M)
+DECISION_LIKE = re.compile(r"#{1,6}[ \t]*D(\d+)")  # a heading meant as a decision, well formed or not
+# a knowledge id may follow the parenthesis (`→ K0012`, desk-close)
+DECISION_HEAD = re.compile(r"## D(\d+)\. \S.*  \(\d{4}-\d{2}-\d{2}, [^)\s][^)]*\)(?:\s+→\s*\S.*)?")
+
+
+def strip_comments(text: str) -> str:
+    return re.sub(r"<!--.*?-->", "", text, flags=re.S)
+
+
+def decision_problems(text: str) -> list[str]:
+    """Warnings about decision headings: the format `## D<n>. 제목  (YYYY-MM-DD, 상태)` and
+    numbers going 1, 2, 3... without a gap or a repeat."""
+    problems, numbers = [], []
+    for line in strip_comments(text).splitlines():
+        like = DECISION_LIKE.match(line)
+        if not like:
+            continue
+        numbers.append(int(like.group(1)))
+        if not DECISION_HEAD.fullmatch(line.rstrip()):
+            problems.append(f"결정 머리 형식이 아닙니다(`## D<번호>. 제목  (YYYY-MM-DD, 상태)`, "
+                            f"제목과 괄호 사이는 공백 두 칸): {line.strip()}")
+    seen = set()
+    for n in numbers:
+        if n in seen:
+            problems.append(f"결정 번호가 겹칩니다: D{n}")
+        seen.add(n)
+    missing = [n for n in range(1, max(numbers, default=0) + 1) if n not in seen]
+    if missing:
+        problems.append(f"결정 번호가 빠졌습니다: {', '.join(f'D{n}' for n in missing)}")
+    if numbers != sorted(numbers):
+        problems.append(f"결정 번호가 순서대로가 아닙니다: {', '.join(f'D{n}' for n in numbers)}")
+    return problems
+
+
 # A task may have one parent (one level only: a parent cannot itself have a parent)
 # and a free list of related tasks. Both are stored by task id.
 

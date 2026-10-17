@@ -1,7 +1,9 @@
 """python -m unittest discover -s tests"""
 
+import json
 import os
 import subprocess
+import time
 import sys
 import tempfile
 import unittest
@@ -10,7 +12,7 @@ from pathlib import Path
 BIN = Path(__file__).resolve().parents[1] / "bin"
 sys.path.insert(0, str(BIN))
 
-from agent_desk.core import file_lock, is_write_temp, write_text
+from agent_desk.core import file_lock, is_write_temp, root_lock, root_lock_name, write_text
 
 
 class WriteText(unittest.TestCase):
@@ -56,6 +58,81 @@ class ParallelKnAdd(unittest.TestCase):
                 self.assertEqual(p.returncode, 0, err.decode("utf-8", "replace"))
             ids = [f.name.split("-")[0] for f in (root / "projects" / "p" / "knowledge").glob("K*.md")]
             self.assertEqual(sorted(ids), [f"K{i:04d}" for i in range(1, 7)])
+
+
+class RootLock(unittest.TestCase):
+    def test_name_is_per_data_root(self):
+        with tempfile.TemporaryDirectory() as d:
+            a, b = Path(d) / "a", Path(d) / "b"
+            self.assertNotEqual(root_lock_name(a), root_lock_name(b))
+            self.assertEqual(root_lock_name(a), root_lock_name(Path(d) / "x" / ".." / "a"))
+            if os.name == "nt":
+                self.assertEqual(root_lock_name(a), root_lock_name(Path(str(a).upper())))
+
+
+class DeskRepo(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        d = Path(self._tmp.name)
+        self.repo, self.root = d / "repo", d / "root"
+        self.repo.mkdir()
+        subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
+        self.env = {**os.environ, "AGENT_DESK_ROOT": str(self.root)}
+        self.desk = [sys.executable, str(BIN / "desk.py"), "--cwd", str(self.repo)]
+        self.run_desk("project-init", "p")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def run_desk(self, *args):
+        r = subprocess.run(self.desk + list(args), env=self.env, capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r
+
+    def new_task(self, slug):
+        return json.loads(self.run_desk("new", "--title", slug, "--no-branch", "--no-focus", "--slug", slug).stdout)["task"]
+
+    def popen(self, *args):
+        return subprocess.Popen(self.desk + list(args), env=self.env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+
+    def wait_ok(self, procs):
+        for p in procs:
+            with p:
+                self.assertEqual(p.wait(), 0, p.stderr.read().decode("utf-8", "replace"))
+
+
+class ParallelCommands(DeskRepo):
+    def test_different_commands_on_one_task_keep_every_change(self):
+        a = self.new_task("a")
+        others = [self.new_task(f"b{i}") for i in range(4)]
+        procs = [self.popen("relate", a, "--add", b) for b in others]
+        procs += [self.popen("link", a, "--branch", f"br{i}") for i in range(4)]
+        procs += [self.popen("kn", "add", "--kind", "finding", "--title", f"t{i}") for i in range(2)]
+        self.wait_ok(procs)
+        task = json.loads(self.run_desk("list").stdout)[0]
+        self.assertEqual(task["id"], a)
+        self.assertEqual(sorted(task["branches"]), [f"br{i}" for i in range(4)])
+        state = (self.root / "projects" / "p" / "tasks" / a / "state.md").read_text(encoding="utf-8")
+        for b in others:
+            self.assertIn(b, state.split("related:")[1].splitlines()[0])
+        log = (self.root / "projects" / "p" / "tasks" / a / "log.md").read_text(encoding="utf-8")
+        self.assertEqual(log.count("연관 태스크 추가"), 4)
+        self.assertEqual(log.count("브랜치 연결"), 4)
+
+
+class LockScope(DeskRepo):
+    def test_read_commands_do_not_wait_and_writes_do(self):
+        a = self.new_task("a")
+        with root_lock(self.root):
+            for args in (["where"], ["list"], ["kn", "list"], ["kn", "search", "x"], ["doctor"]):
+                start = time.monotonic()
+                self.run_desk(*args)
+                self.assertLess(time.monotonic() - start, 5, args)
+            writer = self.popen("status", a, "on_hold")
+            time.sleep(1.5)
+            self.assertIsNone(writer.poll(), "a write command ran while the data root lock was held")
+        self.wait_ok([writer])
+        self.assertEqual(json.loads(self.run_desk("list").stdout)[0]["status"], "on_hold")
 
 
 if __name__ == "__main__":

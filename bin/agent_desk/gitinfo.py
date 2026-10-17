@@ -29,7 +29,23 @@ def normalize_remote(url: str) -> str:
 
 
 def normalize_path(p: str | Path) -> str:
-    return str(Path(p).expanduser().resolve()).replace("\\", "/").rstrip("/").casefold()
+    return str(Path(native_path(str(p))).expanduser().resolve()).replace("\\", "/").rstrip("/").casefold()
+
+
+def native_path(p: str) -> str:
+    """A Git Bash / MSYS path (/c/Users/...) as the Windows path it means; any other path as is."""
+    import os
+    if os.name == "nt":
+        m = re.match(r"^/([A-Za-z])(/.*)?$", p)
+        if m:
+            return f"{m.group(1).upper()}:{m.group(2) or '/'}"
+    return p
+
+
+def is_under(root: Path, path: Path) -> bool:
+    """True when path is root or inside it (case, separators, symlinks and `..` normalized)."""
+    r, p = normalize_path(root), normalize_path(path)
+    return p == r or p.startswith(r + "/")
 
 
 class RepoInfo:

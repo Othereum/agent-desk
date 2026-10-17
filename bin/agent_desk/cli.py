@@ -7,24 +7,25 @@ import json
 import os
 import re
 import sys
+import tomllib
 from pathlib import Path
 
 from .core import (
     CLOSED_STATUSES, DEFAULT_ID_TEMPLATE, DEFAULT_SHARED_BRANCHES, DeskError, LEGACY_STATUSES, OPEN_STATUSES,
-    PYTHON_ALIAS_MESSAGE, SCHEMA_VERSION, TASK_FILES, desk_root, ensure_root, file_lock, now_minute, python_alias,
-    read_text, schema_version, today, write_schema_version, write_text,
+    PYTHON_ALIAS_MESSAGE, SCHEMA_VERSION, TASK_FILES, desk_root, ensure_root, now_minute, python_alias,
+    read_text, root_lock, schema_version, today, write_schema_version, write_text,
 )
-from .frontmatter import format_scalar, format_value, update_frontmatter
-from .gitinfo import repo_info
+from .frontmatter import format_scalar, format_value, parse_frontmatter, split_frontmatter, update_frontmatter
+from .gitinfo import is_under, native_path, normalize_path, repo_info
 from .model import (
     TRASH_DIR, TRASH_LOG_LINE, append_log, build_id, check_branch_free, children_of, current_project,
-    find_trashed, get_focus_id, get_focus_task, get_project, get_task, load_projects, load_tasks, load_trash,
-    main_worktree, match_project, projects_dir, render_template, resolve_parent, resolve_session_task, sanitize,
-    set_focus, set_meta, task_list_field, trashed_at,
+    decision_problems, find_trashed, get_focus_id, get_focus_task, get_project, get_task, load_projects,
+    load_tasks, load_trash, main_worktree, match_project, projects_dir, render_template, resolve_parent,
+    resolve_session_task, sanitize, set_focus, set_meta, task_dir_of, task_list_field, touch_task, trashed_at,
 )
 from .index import write_index
 from .knowledge import (
-    KN_KINDS, all_entries, entries_for_path, entry_references, find_entry, inject_order, kn_dir, load_entries,
+    KN_INACTIVE, KN_KINDS, all_entries, entries_for_path, entry_references, find_entry, inject_order, kn_dir, load_entries,
     next_entry_id, repo_relative, search_score, split_csv, tombstone_entry, try_project, update_entry, write_kn_index,
 )
 from .doctor import DOCTOR_MARKER, doctor_knowledge, doctor_tasks, project_repo
@@ -389,13 +390,11 @@ def cmd_kn_add(args) -> None:
         "sources": format_value(sources), "location": format_scalar(args.location),
         "date": today(), "verified": now_minute(), "body": body,
     }
-    base = kn_dir(root, project)
-    # parallel agents may add entries at once: allocate the ID and create the file under one lock
-    with file_lock(f"kn-{project.key if project else 'global'}"):
-        entry_id = values["id"] = next_entry_id(load_entries(root, project), "K" if project else "G")
-        name = f"{entry_id}-{sanitize(args.slug)}.md" if args.slug else f"{entry_id}.md"
-        path = base / name
-        write_text(path, render_template(project.lang if project else "ko", "knowledge.md", values))
+    # allocating the ID reads then writes: safe because `run` holds the data root lock
+    entry_id = values["id"] = next_entry_id(load_entries(root, project), "K" if project else "G")
+    name = f"{entry_id}-{sanitize(args.slug)}.md" if args.slug else f"{entry_id}.md"
+    path = kn_dir(root, project) / name
+    write_text(path, render_template(project.lang if project else "ko", "knowledge.md", values))
     write_kn_index(root, project)
     out({"id": entry_id, "scope": project.key if project else "global", "file": path.as_posix()})
 
@@ -516,6 +515,238 @@ def cmd_kn_stale(args) -> None:
     out({"id": e.id, "status": "stale"})
 
 
+def desk_target(root: Path, raw: str, cwd: Path) -> Path:
+    """The existing data root file a put/append names: absolute, or relative to the data root
+    (then to the current directory). Anything outside the data root is refused."""
+    given = Path(native_path(raw)).expanduser()
+    candidates = [given] if given.is_absolute() else [root / given, cwd / given]
+    path = next((p for p in candidates if p.exists()), candidates[0])
+    if not is_under(root, path) or normalize_path(path) == normalize_path(root):
+        raise DeskError(f"데이터 폴더({root.as_posix()}) 안의 파일만 쓸 수 있습니다: {raw}")
+    if not path.is_file():
+        raise DeskError(f"데이터 폴더에 없는 파일입니다: {path.as_posix()}. 태스크와 knowledge 파일은 "
+                        "`adesk new`·`adesk kn add` 로 만들고, 위치는 `adesk where` 의 task_dir 로 확인하세요")
+    path = path.resolve()  # the file's own spelling: what is checked depends on the name (STATE.MD is state.md)
+    if path.name == "index.md":
+        raise DeskError("index.md 는 자동 생성 파일입니다. `adesk index` 로 다시 만드세요")
+    return path
+
+
+def read_content(source: str) -> str:
+    if source == "-":
+        text = sys.stdin.read()
+    else:
+        try:
+            text = read_text(Path(native_path(source)).expanduser())
+        except OSError as e:
+            raise DeskError(f"--file 을 읽을 수 없습니다: {source} ({e.strerror or e})")
+    text = text.lstrip("﻿").replace("\r\n", "\n")
+    if not text.strip():
+        raise DeskError("쓸 내용이 비어 있습니다")
+    return text if text.endswith("\n") else text + "\n"
+
+
+def frontmatter_kind(path: Path) -> str | None:
+    """"state" or "knowledge" for the files whose frontmatter only the CLI writes (K0045)."""
+    if path.name == "state.md":
+        return "state"
+    if path.parent.name == "knowledge" and path.suffix == ".md":
+        return "knowledge"
+    return None
+
+
+def check_desk_text(path: Path, text: str) -> None:
+    """Refuse content the CLI and hooks could not read back: frontmatter of state.md and
+    knowledge entries, TOML of project.toml and desk.toml."""
+    if path.suffix == ".toml":
+        try:
+            tomllib.loads(text)
+        except tomllib.TOMLDecodeError as e:
+            raise DeskError(f"{path.name} 의 TOML을 읽을 수 없어 쓰지 않았습니다: {e}")
+    elif frontmatter_kind(path):
+        try:
+            parse_frontmatter(text)
+        except DeskError as e:
+            raise DeskError(f"{path.name} 의 frontmatter를 읽을 수 없어 쓰지 않았습니다: {e}. "
+                            "agent-desk:desk 스킬의 frontmatter 형식을 따르세요") from None
+
+
+def current_meta(path: Path) -> dict | None:
+    try:
+        return parse_frontmatter(read_text(path))
+    except DeskError:
+        return None
+
+
+def keep_frontmatter(path: Path, text: str, auto: dict, warnings: list[str]) -> tuple[str, dict]:
+    """The copy's body under the current file's frontmatter (the copy's own frontmatter, if it
+    has one, is ignored) with the CLI's `auto` updates applied. Returns it and `kept`: the keys
+    whose value in the copy differed from the one written (None: not written), auto keys aside."""
+    current = read_text(path)
+    if text.split("\n", 1)[0].strip() == "---":
+        try:
+            body = split_frontmatter(text)[1]
+        except DeskError:
+            raise DeskError("사본이 `---` 로 시작하지만 frontmatter가 닫히지 않았습니다. "
+                            "frontmatter는 현재 파일 값을 유지하니 본문만 넘겨도 됩니다") from None
+        try:
+            given = parse_frontmatter(text)
+        except DeskError as e:
+            given = {}
+            warnings.append(f"사본의 frontmatter를 읽을 수 없어 무시했습니다: {e}")
+    else:
+        body, given = text, None  # body only
+    merged = "---\n" + "\n".join(split_frontmatter(current)[0]) + "\n---\n" + body
+    if auto:
+        merged = update_frontmatter(merged, auto)
+    if given is None:
+        return merged, {}
+    written = parse_frontmatter(merged)
+    # an empty value and a missing key mean the same (`kn verify` writes `stale_reason:`)
+    kept = {k: written.get(k) for k in dict.fromkeys([*written, *given])
+            if k not in auto and (written.get(k) or "") != (given.get(k) or "")}
+    return merged, kept
+
+
+def auto_updates(path: Path, kind: str | None, meta: dict | None, verified: bool) -> dict:
+    """The frontmatter keys the CLI sets itself when it writes the file."""
+    if verified and not kind:
+        raise DeskError("--verified 는 state.md 와 knowledge 항목에만 쓸 수 있습니다")
+    if verified and meta is None:
+        raise DeskError(f"{path.name} 의 frontmatter를 읽을 수 없어 --verified 를 적용할 수 없습니다. 먼저 고치세요")
+    auto = {}
+    if kind == "state" or (meta and "updated" in meta):
+        auto["updated"] = today()
+    if verified and kind == "state":
+        auto["verified"] = now_minute()
+    elif verified:  # the same as `kn verify`
+        status = meta.get("status", "valid")
+        if status in KN_INACTIVE:
+            raise DeskError(f"{status} 상태인 항목은 확인 표시할 수 없습니다: {path.name}")
+        auto.update({"status": "valid", "verified": now_minute(), "stale_reason": ""})
+    return auto
+
+
+def refresh_indexes(root: Path, path: Path) -> None:
+    """index.md shows titles, statuses and `updated`: rebuild the one the written file feeds."""
+    rel = path.resolve().relative_to(root.resolve()).parts
+    if rel[0] == "projects" and not (root / "projects" / rel[1] / "project.toml").is_file():
+        return
+    if rel[0] == "projects" and task_dir_of(path):
+        write_index(get_project(root, rel[1]))
+    elif path.parent.name == "knowledge" and path.suffix == ".md":
+        write_kn_index(root, get_project(root, rel[1]) if rel[0] == "projects" else None)
+
+
+KEPT_NOTE = ("frontmatter는 현재 값을 유지했습니다. 바꾸려면 `adesk set`(제목·설계 문서·링크), `status`·`link`·`relate`, "
+             "`kn edit`·`kn verify` 를 쓰세요")
+
+
+def write_desk_file(args, append: bool) -> None:
+    root = ensure_root()
+    path = desk_target(root, args.path, Path(args.cwd))
+    content = read_content(args.file)
+    kind = frontmatter_kind(path)
+    meta = current_meta(path) if kind else None
+    auto = auto_updates(path, kind, meta, getattr(args, "verified", False))
+    warnings, kept = [], {}
+    if append:
+        old = read_text(path)
+        if old and not old.endswith("\n"):
+            old += "\n"
+        if old.strip() and content.startswith("#") and not old.endswith("\n\n"):
+            old += "\n"  # a new heading starts after a blank line, as `append_log` writes it
+        text = old + content
+        check_desk_text(path, text)
+        if auto:
+            text = update_frontmatter(text, auto)
+    elif kind and meta is not None:
+        text, kept = keep_frontmatter(path, content, auto, warnings)
+    else:
+        # also the repair of an unreadable state.md or entry: the only case the copy's
+        # frontmatter is written, once it reads back (no command could fix it otherwise)
+        check_desk_text(path, content)
+        text = update_frontmatter(content, auto) if auto else content
+    if path.name == "decisions.md":
+        warnings += decision_problems(text)
+    write_text(path, text)
+    task_dir = task_dir_of(path)
+    if task_dir and kind != "state" and not touch_task(task_dir):
+        warnings.append("state.md 의 frontmatter를 읽을 수 없어 updated 를 갱신하지 못했습니다")
+    refresh_indexes(root, path)
+    out({"file": path.as_posix(), "action": "append" if append else "put", "lines": text.count("\n"),
+         **({"kept": kept, "note": KEPT_NOTE} if kept else {}), **{k: auto[k] for k in ("verified",) if k in auto},
+         **({"warnings": warnings} if warnings else {})})
+
+
+def refuse_option(hint: str):
+    """An argparse action for an option an agent may guess here but another command handles (K0035)."""
+    import argparse
+
+    class Refuse(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            parser.exit(2, f"오류: {option_string} 는 이 명령으로 바꾸지 않습니다. {hint}\n")
+    return Refuse
+
+
+def cmd_set(args) -> None:
+    root = ensure_root()
+    project, _ = current_project(root, Path(args.cwd), args.project)
+    task = get_task(project, args.id)
+    if task.status == "?":
+        raise DeskError(f"{task.id} 의 state.md frontmatter를 읽을 수 없습니다: {task.meta.get('error', '')}. "
+                        "사본을 고쳐 `adesk put` 으로 바로잡으세요")
+    updates, logs = {}, []
+    if args.title is not None:
+        if not args.title.strip():
+            raise DeskError("제목이 비어 있습니다")
+        if args.title != task.meta.get("title", ""):
+            updates["title"] = args.title
+            logs.append(f"제목 변경: {task.meta.get('title', '')} → {args.title}")
+    if args.design_doc is not None and args.design_doc != (task.meta.get("design_doc") or ""):
+        updates["design_doc"] = args.design_doc
+        logs.append(f"설계 문서 지정: {args.design_doc}" if args.design_doc else "설계 문서 해제")
+    links = list(task_list_field(task, "links"))  # a copy: compared with the stored list below
+    for url in args.add_link or []:
+        if url not in links:
+            links.append(url)
+            logs.append(f"링크 추가: {url}")
+    for url in args.remove_link or []:
+        if url in links:
+            links.remove(url)
+            logs.append(f"링크 제거: {url}")
+    if links != task_list_field(task, "links"):
+        updates["links"] = links
+    if updates:
+        set_meta(task, updates)
+        append_log(task, logs)
+        write_index(project)
+    out({"task": task.id, "title": task.meta.get("title", ""), "design_doc": task.meta.get("design_doc") or None,
+         "links": task_list_field(task, "links"), "changed": bool(updates)})
+
+
+def cmd_kn_edit(args) -> None:
+    root = ensure_root()
+    project, _ = try_project(root, args)
+    e = find_entry(root, project, args.id)
+    if e.status == "deleted":
+        raise DeskError(f"삭제된 항목입니다: {e.id}")
+    if e.scope == "global" and args.paths:
+        raise DeskError("전역 항목에는 --paths 를 쓸 수 없습니다. --tags 로 매칭합니다")
+    if args.title is not None and not args.title.strip():
+        raise DeskError("제목이 비어 있습니다")
+    given = {"title": args.title, "kind": args.kind, "location": args.location,
+             "paths": None if args.paths is None else split_csv(args.paths),
+             "tags": None if args.tags is None else split_csv(args.tags)}
+    updates = {k: v for k, v in given.items()
+               if v is not None and v != (e.items(k) if k in ("paths", "tags") else e.meta.get(k))}
+    if updates:
+        update_entry(e, updates)
+        write_kn_index(root, project if e.scope != "global" else None)
+    out({"id": e.id, "changed": sorted(updates),
+         **{k: e.meta.get(k) for k in ("title", "kind", "paths", "tags", "location")}})
+
+
 def cmd_doctor(args) -> None:
     root = ensure_root()
     project, _ = try_project(root, args)
@@ -554,6 +785,18 @@ def cmd_doctor(args) -> None:
     write_text(project.dir / DOCTOR_MARKER, dt.datetime.now().isoformat(timespec="minutes") + "\n")
     out({"project": project.key, "repo": top.as_posix() if top else None,
          "issues": issues, "marked_stale": applied})
+
+
+# commands that never change the data root. Every other command, a new one included, holds the
+# data root lock for its whole run (K0044). hook only reads (its session cache is in the temp dir)
+READ_ONLY_COMMANDS = {"where", "list", "hook", "kn list", "kn search", "kn show"}
+
+
+def changes_data(args) -> bool:
+    name = f"kn {args.kn_cmd}" if args.cmd == "kn" else args.cmd
+    if name == "doctor":
+        return args.apply  # without --apply it writes only its own marker file, in one atomic write
+    return name not in READ_ONLY_COMMANDS
 
 
 def run(argv: list[str]) -> int:
@@ -631,6 +874,27 @@ def run(argv: list[str]) -> int:
 
     sub.add_parser("index", help="태스크·knowledge index.md 재생성")
 
+    p = sub.add_parser("set", aliases=["edit"], help="태스크의 제목·설계 문서·링크 변경",
+                       description="상태는 status·close, 브랜치는 link, 상위·연관 태스크는 relate 로 바꾼다.")
+    p.add_argument("id")
+    p.add_argument("--title")
+    p.add_argument("--design-doc", help="설계 문서 URL (빈 값이면 해제)")
+    p.add_argument("--add-link", "--link", dest="add_link", action="append", metavar="URL", help="링크 추가 (반복 가능)")
+    p.add_argument("--remove-link", "--unlink", dest="remove_link", action="append", metavar="URL", help="링크 제거 (반복 가능)")
+    for opts, hint in ((("--status",), "`adesk status <id> <상태>`, 종료는 `adesk close`"),
+                       (("--branch", "--branches"), "`adesk link <id> --branch <브랜치>`"),
+                       (("--parent", "--related"), "`adesk relate <id> --parent/--add/--remove`")):
+        p.add_argument(*opts, nargs="?", action=refuse_option(hint), help=argparse.SUPPRESS)
+
+    for name, help_text in (("put", "데이터 폴더 파일을 --file 내용으로 교체 (frontmatter는 현재 값 유지)"),
+                            ("append", "데이터 폴더 파일 끝에 --file 내용을 덧붙임")):
+        p = sub.add_parser(name, help=help_text)
+        p.add_argument("path", help="데이터 폴더 안의 파일 (절대 경로 또는 데이터 폴더 기준 상대 경로)")
+        p.add_argument("--file", "-f", required=True, help="쓸 내용이 든 파일 (- 이면 표준 입력)")
+        if name == "put":
+            p.add_argument("--verified", action="store_true",
+                           help="내용을 코드와 대조해 확인했음을 기록 (state.md, knowledge 항목)")
+
     p = sub.add_parser("migrate", help="데이터 폴더를 현재 스키마로 변환")
     p.add_argument("--dry-run", action="store_true", help="바꿀 내용만 출력")
 
@@ -643,8 +907,19 @@ def run(argv: list[str]) -> int:
     p.add_argument("--sources", help="출처 태스크 ID (기본: 현재 브랜치의 태스크, 없으면 포커스 태스크)")
     p.add_argument("--location", default="inline", help="inline | repo:<경로> | claude-docs:<url>")
     p.add_argument("--slug", help="파일명용 영문 슬러그")
-    p.add_argument("--body", help="본문 (생략 시 안내 주석만 넣고 이후 직접 편집)")
+    p.add_argument("--body", help="본문 (생략 시 안내 주석만 넣고 이후 put 으로 작성)")
     p.add_argument("--global", dest="is_global", action="store_true", help="전역 항목으로 추가")
+    p = kn.add_parser("edit", aliases=["set"], help="항목의 제목·paths·tags·종류·location 변경",
+                      description="상태는 kn verify·stale·supersede·retire 로 바꾼다.")
+    p.add_argument("id")
+    p.add_argument("--title")
+    p.add_argument("--kind", choices=KN_KINDS)
+    p.add_argument("--paths", help="관련 경로 glob, 목록 전체를 바꿈 (쉼표 구분)")
+    p.add_argument("--tags", help="태그, 목록 전체를 바꿈 (쉼표 구분)")
+    p.add_argument("--location", help="inline | repo:<경로> | claude-docs:<url>")
+    for opts, hint in ((("--status",), "`kn verify`·`kn stale`·`kn supersede`·`kn retire` 를 쓰세요"),
+                       (("--verified",), "`adesk kn verify <id>` 를 쓰세요")):
+        p.add_argument(*opts, nargs="?", action=refuse_option(hint), help=argparse.SUPPRESS)
     p = kn.add_parser("list", help="항목 목록 (프로젝트 + 전역)")
     p.add_argument("--all", action="store_true", help="대체·폐기·삭제된 항목 포함")
     p = kn.add_parser("search", help="항목 검색")
@@ -678,21 +953,23 @@ def run(argv: list[str]) -> int:
 
     args = ap.parse_args(argv)
     handlers = {
-        "where": cmd_where, "project-init": cmd_project_init, "new": cmd_new,
+        "where": cmd_where, "project-init": cmd_project_init, "new": cmd_new, "set": cmd_set, "edit": cmd_set,
         "link": cmd_link, "relate": cmd_relate, "focus": cmd_focus, "status": cmd_status, "migrate": cmd_migrate, "close": cmd_close, "reopen": cmd_reopen,
-        "delete": cmd_delete, "restore": cmd_restore,
-        "list": cmd_list, "index": cmd_index, "hook": lambda a: cmd_hook(a.event), "doctor": cmd_doctor,
+        "delete": cmd_delete, "restore": cmd_restore, "list": cmd_list, "index": cmd_index,
+        "put": lambda a: write_desk_file(a, append=False), "append": lambda a: write_desk_file(a, append=True), "hook": lambda a: cmd_hook(a.event), "doctor": cmd_doctor,
     }
     kn_handlers = {
-        "add": cmd_kn_add, "list": cmd_kn_list, "search": cmd_kn_search, "show": cmd_kn_show,
+        "add": cmd_kn_add, "edit": cmd_kn_edit, "set": cmd_kn_edit, "list": cmd_kn_list, "search": cmd_kn_search, "show": cmd_kn_show,
         "supersede": cmd_kn_supersede, "retire": cmd_kn_retire, "delete": cmd_kn_delete,
         "verify": cmd_kn_verify, "stale": cmd_kn_stale,
     }
+    handler = kn_handlers[args.kn_cmd] if args.cmd == "kn" else handlers[args.cmd]
     try:
-        if args.cmd == "kn":
-            kn_handlers[args.kn_cmd](args)
+        if changes_data(args):
+            with root_lock(desk_root()):
+                handler(args)
         else:
-            handlers[args.cmd](args)
+            handler(args)
     except DeskError as e:
         print(f"오류: {e}", file=sys.stderr)
         return 1

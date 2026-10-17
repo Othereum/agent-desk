@@ -217,6 +217,8 @@ def search_score(e: Entry, terms: list[str]) -> int:
 
 def update_entry(e: Entry, updates: dict) -> None:
     """A None value removes the key."""
+    if "updated" in e.meta:  # entries have no `updated` by default; one that has it is kept current
+        updates = {**updates, "updated": today()}
     write_text(e.path, update_frontmatter(read_text(e.path), updates))
     e.meta.update(updates)
     for k in [k for k, v in updates.items() if v is None]:
