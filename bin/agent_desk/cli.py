@@ -17,10 +17,10 @@ from .core import (
 from .frontmatter import format_scalar, format_value, update_frontmatter
 from .gitinfo import repo_info
 from .model import (
-    append_log, build_id, check_branch_free, children_of, current_project, get_focus_id,
-    get_focus_task, get_project, get_task, load_projects, load_tasks, main_worktree, match_project,
-    projects_dir, render_template, resolve_parent, resolve_session_task, sanitize, set_focus, set_meta,
-    task_list_field,
+    TRASH_DIR, TRASH_LOG_LINE, append_log, build_id, check_branch_free, children_of, current_project,
+    find_trashed, get_focus_id, get_focus_task, get_project, get_task, load_projects, load_tasks, load_trash,
+    main_worktree, match_project, projects_dir, render_template, resolve_parent, resolve_session_task, sanitize,
+    set_focus, set_meta, task_list_field, trashed_at,
 )
 from .index import write_index
 from .knowledge import (
@@ -248,6 +248,57 @@ def cmd_reopen(args) -> None:
     out({"task": task.id, "status": "in_progress", "dir": str(dest)})
 
 
+def cmd_delete(args) -> None:
+    root = ensure_root()
+    project, _ = current_project(root, Path(args.cwd), args.project)
+    import shutil
+    trashed = find_trashed(project, args.id)
+    if args.purge:
+        if not trashed:
+            get_task(project, args.id)  # not found at all: say so
+            raise DeskError(f"휴지통에 있는 태스크만 영구히 지울 수 있습니다. 먼저 adesk delete {args.id} 로 휴지통으로 옮기세요")
+        shutil.rmtree(trashed.dir)
+        out({"task": trashed.id, "status": "purged", "note": KN_DELETE_NOTE})
+        return
+    if trashed:
+        raise DeskError(f"이미 휴지통에 있는 태스크입니다: {trashed.id}. 영구히 지우려면 --purge")
+    task = get_task(project, args.id)
+    dest = project.dir / TRASH_DIR / task.id
+    if dest.exists():  # a leftover folder without state.md
+        raise DeskError(f"휴지통에 같은 이름의 폴더가 이미 있습니다: {dest}")
+    append_log(task, [TRASH_LOG_LINE])
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(task.dir), str(dest))
+    write_index(project)
+    out({"task": task.id, "status": task.status, "dir": str(dest), "deleted": True})
+
+
+def cmd_restore(args) -> None:
+    root = ensure_root()
+    project, _ = current_project(root, Path(args.cwd), args.project)
+    task = find_trashed(project, args.id)
+    if not task:
+        get_task(project, args.id)  # not found at all: say so
+        raise DeskError(f"휴지통에 없는 태스크입니다: {args.id}")
+    for t in load_tasks(project, include_archive=True):
+        if t.id.casefold() == task.id.casefold():
+            raise DeskError(f"같은 ID의 태스크가 이미 있습니다: {t.dir}")
+    archived = task.status in CLOSED_STATUSES
+    if not archived:
+        for b in task.branches:
+            check_branch_free(project, b, task.id)
+    dest = project.dir / ("archive" if archived else "tasks") / task.id
+    if dest.exists():  # a leftover folder without state.md
+        raise DeskError(f"같은 이름의 폴더가 이미 있습니다: {dest}")
+    import shutil
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(task.dir), str(dest))
+    task.dir, task.archived, task.trashed = dest, archived, False
+    append_log(task, ["휴지통에서 되살림"])
+    write_index(project)
+    out({"task": task.id, "status": task.status, "dir": str(dest), "archived": archived})
+
+
 def migrate_task_statuses(root: Path, dry_run: bool) -> list[dict]:
     """Schema 1 → 2: active/paused/abandoned become in_progress/on_hold/cancelled."""
     changed = []
@@ -294,6 +345,12 @@ def cmd_list(args) -> None:
     projects = [get_project(root, args.project)] if args.project else load_projects(root)
     rows = []
     for p in projects:
+        if args.deleted:
+            for t in load_trash(p):
+                rows.append({"project": p.key, "id": t.id, "title": t.meta.get("title", ""),
+                             "status": t.status, "branches": t.branches,
+                             "parent": t.meta.get("parent") or None, "deleted": trashed_at(t)})
+            continue
         for t in load_tasks(p, include_archive=args.all):
             rows.append({"project": p.key, "id": t.id, "title": t.meta.get("title", ""),
                          "status": t.status, "branches": t.branches,
@@ -461,7 +518,7 @@ def cmd_doctor(args) -> None:
     focus_id = get_focus_id(project)
     if focus_id and not get_focus_task(project):
         issues.append({"level": "info", "kind": "focus-stale", "id": focus_id,
-                       "message": "포커스가 종료되었거나 없는 태스크를 가리킴. `focus --clear` 또는 다른 태스크로 지정"})
+                       "message": "포커스가 종료되었거나 휴지통에 있거나 없는 태스크를 가리킴. `focus --clear` 또는 다른 태스크로 지정"})
     doctor_knowledge(root, project, top, args.min_commits, issues)
     doctor_knowledge(root, None, None, args.min_commits, issues)
 
@@ -536,8 +593,17 @@ def run(argv: list[str]) -> int:
     p = sub.add_parser("reopen", help="아카이브된 태스크 재개")
     p.add_argument("id")
 
+    p = sub.add_parser("delete", help="태스크를 휴지통으로 옮김 (--purge: 휴지통의 태스크를 영구 삭제)")
+    p.add_argument("id")
+    p.add_argument("--purge", action="store_true", help="휴지통에 있는 태스크를 영구히 지운다")
+
+    p = sub.add_parser("restore", help="휴지통의 태스크를 되살림")
+    p.add_argument("id")
+
     p = sub.add_parser("list", help="태스크 목록")
-    p.add_argument("--all", action="store_true", help="아카이브 포함")
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--all", action="store_true", help="아카이브 포함")
+    g.add_argument("--deleted", action="store_true", help="휴지통의 태스크만")
 
     sub.add_parser("index", help="태스크·knowledge index.md 재생성")
 
@@ -588,6 +654,7 @@ def run(argv: list[str]) -> int:
     handlers = {
         "where": cmd_where, "project-init": cmd_project_init, "new": cmd_new,
         "link": cmd_link, "relate": cmd_relate, "focus": cmd_focus, "status": cmd_status, "migrate": cmd_migrate, "close": cmd_close, "reopen": cmd_reopen,
+        "delete": cmd_delete, "restore": cmd_restore,
         "list": cmd_list, "index": cmd_index, "hook": lambda a: cmd_hook(a.event), "doctor": cmd_doctor,
     }
     kn_handlers = {

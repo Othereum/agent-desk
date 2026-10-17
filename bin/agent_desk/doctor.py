@@ -9,7 +9,7 @@ from pathlib import Path
 from .core import DeskError, OPEN_STATUSES, is_write_temp, read_text
 from .frontmatter import frontmatter_comments
 from .gitinfo import git, repo_info
-from .model import Project, load_tasks, match_project, stray_files
+from .model import Project, load_tasks, load_trash, match_project, stray_files, trashed_at
 from .knowledge import Entry, glob_regex, kn_dir, load_entries
 
 
@@ -23,6 +23,7 @@ DOCTOR_MARKER = ".last-doctor"
 
 DOCTOR_REMIND_DAYS = 7
 TASK_IDLE_DAYS = 30
+TRASH_KEEP_DAYS = 30
 KN_FILE_RE = re.compile(r"^[KG]\d{4}(-[^/\\]*)?\.md$")
 # extension is ASCII so a Korean particle right after a path ("hooks.py는") is not read as part of it
 REF_RE = re.compile(r"(?<![\w/.:-])((?:[\w.-]+/)+[\w.-]+\.[A-Za-z0-9]+)(?::\d+)?")
@@ -191,3 +192,14 @@ def doctor_tasks(project: Project, top: Path | None, issues: list) -> None:
         if updated is not None and now - updated > TASK_IDLE_DAYS * 86400:
             issues.append({"level": "info", "kind": "task-idle", "id": t.id,
                            "message": f"{TASK_IDLE_DAYS}일 넘게 갱신되지 않음(상태 {t.status})"})
+    # the trash is not checked for conflict copies: nothing reads it until a task is restored
+    for t in load_trash(project):
+        when = parse_when(trashed_at(t) or "")
+        if when is None:
+            try:
+                when = (t.dir / "log.md").stat().st_mtime
+            except OSError:
+                continue
+        if now - when > TRASH_KEEP_DAYS * 86400:
+            issues.append({"level": "info", "kind": "trash-old", "id": t.id,
+                           "message": f"휴지통에 {TRASH_KEEP_DAYS}일 넘게 있음. 사용자가 원하면 `delete {t.id} --purge` 로 영구 삭제"})

@@ -1,6 +1,6 @@
 ---
 name: desk
-description: agent-desk 데스크의 태스크 기록(현황 state·결정 decisions·로그 log)을 읽고 갱신하는 상시 규칙과 데스크 용어. 세션 컨텍스트에 "[agent-desk]" 블록이 있을 때, 사용자와 방향·설계를 확정했을 때, 태스크 단계가 끝났을 때, 새 브랜치를 만들었을 때, 여러 태스크를 병렬 에이전트(서브에이전트)에 맡길 때, 사용자가 데스크나 태스크의 현황·결정·로그를 기록하거나 조회하라고 할 때 사용한다.
+description: agent-desk 데스크의 태스크 기록(현황 state·결정 decisions·로그 log)을 읽고 갱신하는 상시 규칙과 데스크 용어. 세션 컨텍스트에 "[agent-desk]" 블록이 있을 때, 사용자와 방향·설계를 확정했을 때, 태스크 단계가 끝났을 때, 새 브랜치를 만들었을 때, 여러 태스크를 병렬 에이전트(서브에이전트)에 맡길 때, 사용자가 데스크나 태스크의 현황·결정·로그를 기록하거나 조회하라고 할 때, 태스크를 지우거나 되살리라고 할 때 사용한다.
 ---
 
 # agent-desk 기록 규칙
@@ -24,6 +24,7 @@ description: agent-desk 데스크의 태스크 기록(현황 state·결정 decis
 | 상위·하위·연관 태스크 | parent, 그 아래 태스크, related |
 | 포커스 태스크 | 브랜치 없이 일할 때 세션이 다루는 태스크 |
 | 아카이브 | 종료된 태스크를 옮겨 두는 곳 |
+| 휴지통으로 옮기기 / 영구 삭제 | 태스크 삭제는 휴지통(`trash/`)으로 옮기기이고 되살릴 수 있다. 영구 삭제는 휴지통의 태스크를 지운다. 지식의 "삭제"(내용을 지우고 ID만 남김)와는 다르다 |
 | 데스크 점검 | `adesk doctor` |
 
 ## CLI
@@ -43,6 +44,10 @@ adesk new --title "제목" --no-branch --slug x --todo   # 예정 태스크로 �
 adesk status <id> todo|in_progress|on_hold
 adesk close <id> done|cancelled [--note "..."]
 adesk reopen <id>
+adesk delete <id>                       # 휴지통으로 옮기기 (열린·종료된 태스크 모두)
+adesk restore <id>                      # 휴지통에서 되살리기 (상태에 따라 tasks/ 또는 archive/로)
+adesk delete <id> --purge               # 휴지통의 태스크를 영구 삭제
+adesk list --deleted                    # 휴지통의 태스크 목록
 adesk index                             # 태스크·knowledge index.md 재생성
 adesk kn search|list|add|supersede|retire|delete|verify|stale ...   # knowledge (agent-desk:kn 스킬)
 adesk doctor [--apply]                  # 낡은 knowledge·충돌 사본·방치된 태스크 점검 (agent-desk:kn 스킬)
@@ -50,7 +55,7 @@ adesk migrate [--dry-run]               # 데이터 폴더를 현재 스키마�
 ```
 `--project KEY`와 `--cwd DIR`은 하위 명령 **앞에** 둔다. 출력은 JSON이다.
 
-ID 생성, 브랜치 중복 검사, 상태 전환, 아카이브 이동은 반드시 CLI로 한다. 폴더를 직접 만들거나 옮기지 않는다.
+ID 생성, 브랜치 중복 검사, 상태 전환, 아카이브·휴지통 이동은 반드시 CLI로 한다. 폴더를 직접 만들거나 옮기거나 지우지 않는다.
 
 ## 저장 구조
 
@@ -61,6 +66,7 @@ ID 생성, 브랜치 중복 검사, 상태 전환, 아카이브 이동은 반드
 <root>/projects/<KEY>/tasks/<id>/decisions.md   # 결정: 항목 추가
 <root>/projects/<KEY>/tasks/<id>/log.md         # 로그: 덧붙이기만
 <root>/projects/<KEY>/archive/<id>/...    # 종료된 태스크
+<root>/projects/<KEY>/trash/<id>/...      # 휴지통 (목록·주입·브랜치 매칭에서 빠짐)
 <root>/projects/<KEY>/knowledge/K0001-*.md      # 프로젝트 knowledge
 <root>/knowledge/G0001-*.md               # 전역 knowledge
 ```
@@ -177,3 +183,7 @@ frontmatter(state.md, knowledge 항목)는 YAML의 일부만 읽는다. 맨 앞 
 ## 종료와 재개
 
 종료는 `agent-desk:desk-close` 절차를 따른다. 멈출 때는 `status <id> on_hold`, 다시 시작할 때는 `status <id> in_progress`를 쓴다.
+
+- 하려다 그만둔 일은 `close <id> cancelled`로 기록을 남긴다. 잘못 만들었거나 중복인 태스크는 `delete <id>`로 휴지통에 옮긴다. 되살릴 때는 `restore <id>`.
+- 영구 삭제(`delete <id> --purge`)는 사용자가 명시적으로 요청할 때만 한다. 출력의 `note`(동기화·백업의 버전 기록에는 남을 수 있음)를 사용자에게 전한다.
+- 휴지통의 태스크는 목록·주입·브랜치 매칭에서 빠진다. 그 태스크를 가리키던 상위·연관 태스크와 포커스는 그대로 두며, 되살리면 다시 이어진다.

@@ -121,8 +121,8 @@ def current_project(root: Path, cwd: Path, key: str | None) -> tuple[Project, Re
 
 
 class Task:
-    def __init__(self, id: str, dir: Path, meta: dict, archived: bool):
-        self.id, self.dir, self.meta, self.archived = id, dir, meta, archived
+    def __init__(self, id: str, dir: Path, meta: dict, archived: bool, trashed: bool = False):
+        self.id, self.dir, self.meta, self.archived, self.trashed = id, dir, meta, archived, trashed
 
     @property
     def state_path(self) -> Path:
@@ -139,29 +139,67 @@ class Task:
         return b if isinstance(b, list) else [b] if b else []
 
 
-def load_tasks(project: Project, include_archive: bool = False) -> list[Task]:
+# Deleting a task moves its folder to <project>/trash/<id>. Everything that reads tasks
+# (lists, session injection, index, branch matching, focus) looks at tasks/ and archive/
+# only, so a trashed task is simply gone until it is restored; references to it are left
+# as they are and read as a missing task.
+TRASH_DIR = "trash"
+TRASH_LOG_LINE = "휴지통으로 옮김"
+
+
+def _scan(base: Path, archived: bool, trashed: bool = False) -> list[Task]:
     tasks = []
-    sources = [("tasks", False)] + ([("archive", True)] if include_archive else [])
-    for sub, archived in sources:
-        base = project.dir / sub
-        if not base.is_dir():
+    if not base.is_dir():
+        return tasks
+    for d in sorted(base.iterdir()):
+        state = d / "state.md"
+        if not state.is_file():
             continue
-        for d in sorted(base.iterdir()):
-            state = d / "state.md"
-            if not state.is_file():
-                continue
-            try:
-                meta = parse_frontmatter(read_text(state))
-            except DeskError as err:
-                meta = {"status": "?", "title": "(frontmatter 오류)", "error": str(err)}
-            tasks.append(Task(d.name, d, meta, archived))
+        try:
+            meta = parse_frontmatter(read_text(state))
+        except DeskError as err:
+            meta = {"status": "?", "title": "(frontmatter 오류)", "error": str(err)}
+        tasks.append(Task(d.name, d, meta, archived, trashed))
     return tasks
+
+
+def load_tasks(project: Project, include_archive: bool = False) -> list[Task]:
+    return _scan(project.dir / "tasks", False) + (_scan(project.dir / "archive", True) if include_archive else [])
+
+
+def load_trash(project: Project) -> list[Task]:
+    return _scan(project.dir / TRASH_DIR, False, trashed=True)
+
+
+def find_trashed(project: Project, task_id: str) -> Task | None:
+    for t in load_trash(project):
+        if t.id.casefold() == task_id.casefold():
+            return t
+    return None
+
+
+def trashed_at(task: Task) -> str | None:
+    """When the task was moved to the trash: the time of the last log entry that says so."""
+    try:
+        text = read_text(task.dir / "log.md")
+    except OSError:
+        return None
+    when = found = None
+    for line in text.splitlines():
+        if line.startswith("## "):
+            when = line[3:].strip()
+        elif line.strip() == f"- {TRASH_LOG_LINE}":
+            found = when
+    return found
 
 
 def get_task(project: Project, task_id: str) -> Task:
     for t in load_tasks(project, include_archive=True):
         if t.id.casefold() == task_id.casefold():
             return t
+    trashed = find_trashed(project, task_id)
+    if trashed:
+        raise DeskError(f"휴지통에 있는 태스크입니다: {trashed.id}. 되살리려면 adesk restore {trashed.id}")
     raise DeskError(f"태스크를 찾을 수 없습니다: {project.key}/{task_id}")
 
 
@@ -194,6 +232,11 @@ def build_id(project: Project, branch: str | None, slug: str | None) -> str:
         raw = f"{d.strftime('%y%m%d')}-{slug}"
     base = sanitize(raw)
     taken = {t.id.casefold() for t in load_tasks(project, include_archive=True)}
+    trashed = {t.id.casefold() for t in load_trash(project)}
+    if base.casefold() in trashed and base.casefold() not in taken:
+        raise DeskError(f"휴지통에 같은 ID의 태스크가 있습니다: {base}. 그 태스크를 되살리려면 adesk restore {base}, "
+                        f"영구히 지우고 새로 만들려면 adesk delete {base} --purge 뒤에 다시 실행하세요")
+    taken |= trashed
     if base.casefold() not in taken:
         return base
     n = 2

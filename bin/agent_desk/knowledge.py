@@ -8,7 +8,7 @@ from pathlib import Path
 from .core import DeskError, TASK_FILES, read_text, today, write_text
 from .frontmatter import parse_frontmatter, split_frontmatter, update_frontmatter
 from .gitinfo import RepoInfo, repo_info
-from .model import Project, get_project, load_projects, load_tasks, match_project
+from .model import Project, get_project, load_projects, load_tasks, load_trash, match_project
 
 
 # Project entries live in projects/<KEY>/knowledge/ (ids K0001...),
@@ -100,11 +100,11 @@ def find_entry(root: Path, project: Project | None, entry_id: str) -> Entry:
 
 
 def entry_references(root: Path, e: Entry) -> list[str]:
-    """`path:line` of every record that mentions the entry's id: task files (archive included)
-    and other knowledge entries (body or frontmatter, e.g. superseded_by). Project ids are
+    """`path:line` of every record that mentions the entry's id: task files (archive and trash
+    included: a trashed task can be restored) and other knowledge entries (body or frontmatter, e.g. superseded_by). Project ids are
     numbered per project, so a project entry is looked up in its own project only."""
     projects = [p for p in load_projects(root) if e.scope in ("global", p.key)]
-    files = [p for proj in projects for t in load_tasks(proj, include_archive=True)
+    files = [p for proj in projects for t in load_tasks(proj, include_archive=True) + load_trash(proj)
              for p in (t.dir / name for name in TASK_FILES) if p.exists()]
     for base in [kn_dir(root, proj) for proj in projects] + [kn_dir(root, None)]:
         if base.is_dir():
