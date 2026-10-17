@@ -49,7 +49,7 @@ adesk restore <id>                      # 휴지통에서 되살리기 (상태�
 adesk delete <id> --purge               # 휴지통의 태스크를 영구 삭제
 adesk list --deleted                    # 휴지통의 태스크 목록
 adesk index                             # 태스크·knowledge index.md 재생성
-adesk kn search|list|add|supersede|retire|delete|verify|stale ...   # knowledge (agent-desk:kn 스킬)
+adesk kn search|show|list|add|supersede|retire|delete|verify|stale ...   # knowledge (agent-desk:kn 스킬)
 adesk doctor [--apply]                  # 낡은 knowledge·충돌 사본·방치된 태스크 점검 (agent-desk:kn 스킬)
 adesk migrate [--dry-run]               # 데이터 폴더를 현재 스키마로 변환
 ```

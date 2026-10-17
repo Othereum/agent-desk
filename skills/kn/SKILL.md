@@ -31,11 +31,13 @@ CLI 경로는 `agent-desk:desk` 스킬의 CLI 항목을 따른다.
 - 시스템을 조사하거나 수정하기 **전에** 검색한다.
   ```
   adesk kn search <검색어...>              # 제목·태그·경로·본문 검색 (전역 포함)
-  adesk kn search --path <파일 경로>        # 그 파일에 해당하는 항목
+  adesk kn search --path <파일 경로>        # 그 파일에 해당하는 항목 (파일 하나)
+  adesk kn show <id...>                   # 항목 본문 전체
   adesk kn list                         # 전체 목록
   ```
+  공백이 든 검색어(`"플러그인 업데이트 버전"`)는 구절 그대로와 단어별로 함께 찾고, 구절이 그대로 맞는 항목이 앞에 온다. 단어 끝의 조사(을·는·에서 등)는 떼고 찾는다.
 - **자동 주입**: 파일을 Read/Edit/Write하면 그 경로에 해당하는 프로젝트 항목이 `[agent-desk knowledge]` 블록으로 자동 주입된다(세션당 항목별 한 번, 컨텍스트 압축 뒤에는 다시 주입). 주입된 항목 중 지금 태스크에 영향을 주는 것은 수정하기 전에 본문을 읽고 반영한다. 전역 항목은 경로가 없으므로 자동 주입되지 않는다. 필요하면 검색한다.
-- 결과의 `summary`로 관련성을 판단하고, 필요한 항목만 `file`을 Read로 읽는다. `location`이 `repo:`나 `claude-docs:`이면 그 위치에 본문이 있다.
+- 결과의 `summary`로 관련성을 판단하고, 필요한 항목만 `kn show <id>`로 보거나 `file`을 Read로 읽는다. `location`이 `repo:`나 `claude-docs:`이면 그 위치에 본문이 있다.
 - knowledge는 **확인할 출발점**이다. `status`가 `stale`이거나 `verified`가 오래되었으면 코드와 대조한다. 대조해서 맞으면 `kn verify <id>`, 틀리면 아래 "고치기"를 따른다.
 
 ## 기록

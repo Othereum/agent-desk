@@ -429,6 +429,14 @@ def cmd_kn_search(args) -> None:
     out([e.as_dict() for s, e in scored if s > 0][:args.limit])
 
 
+def cmd_kn_show(args) -> None:
+    root = desk_root()
+    project, _ = try_project(root, args)
+    # inactive entries too: their status (superseded_by, retired_reason) is in the output
+    shown = [dict(e.as_dict(), body=e.body) for e in (find_entry(root, project, i) for i in args.ids)]
+    out(shown[0] if len(shown) == 1 else shown)
+
+
 def cmd_kn_supersede(args) -> None:
     root = ensure_root()
     project, _ = try_project(root, args)
@@ -490,7 +498,10 @@ def cmd_kn_verify(args) -> None:
     e = find_entry(root, project, args.id)
     check_live(e)
     verified = now_minute()
-    update_entry(e, {"status": "valid", "verified": verified, "stale_reason": ""})
+    updates = {"status": "valid", "verified": verified}
+    if "stale_reason" in e.meta:
+        updates["stale_reason"] = None  # drop it: an entry that was never stale has no such line
+    update_entry(e, updates)
     write_kn_index(root, project if e.scope != "global" else None)
     out({"id": e.id, "status": "valid", "verified": verified})
 
@@ -547,6 +558,14 @@ def cmd_doctor(args) -> None:
 
 def run(argv: list[str]) -> int:
     import argparse
+
+    class Once(argparse.Action):
+        """An option that takes one value: given twice, argparse would keep the last silently."""
+        def __call__(self, parser, namespace, values, option_string=None):
+            if getattr(namespace, self.dest) is not None:
+                parser.error(f"{option_string} 는 한 번만 지정할 수 있습니다. 파일마다 따로 실행하세요")
+            setattr(namespace, self.dest, values)
+
     ap = argparse.ArgumentParser(prog="adesk", description="agent-desk CLI")
     ap.add_argument("--cwd", default=os.getcwd(), help="기준 디렉터리 (기본: 현재 디렉터리)")
     ap.add_argument("--project", help="프로젝트 key (기본: 현재 저장소로 자동 판별)")
@@ -629,10 +648,12 @@ def run(argv: list[str]) -> int:
     p = kn.add_parser("list", help="항목 목록 (프로젝트 + 전역)")
     p.add_argument("--all", action="store_true", help="대체·폐기·삭제된 항목 포함")
     p = kn.add_parser("search", help="항목 검색")
-    p.add_argument("terms", nargs="*")
-    p.add_argument("--path", help="이 파일에 해당하는 항목 (paths glob 매칭)")
+    p.add_argument("terms", nargs="*", help="검색어. 공백이 든 검색어는 구절 그대로와 단어별로 함께 찾는다")
+    p.add_argument("--path", action=Once, help="이 파일에 해당하는 항목 (paths glob 매칭, 파일 하나)")
     p.add_argument("--all", action="store_true", help="대체·폐기·삭제된 항목 포함")
     p.add_argument("--limit", type=int, default=10, help="검색어 결과 최대 건수 (--path 에는 적용하지 않음)")
+    p = kn.add_parser("show", help="항목 본문 전체 (대체·폐기·삭제된 항목은 상태와 함께)")
+    p.add_argument("ids", nargs="+", metavar="id")
     p = kn.add_parser("supersede", help="항목을 다른 항목으로 대체")
     p.add_argument("id")
     p.add_argument("--by", required=True)
@@ -663,7 +684,7 @@ def run(argv: list[str]) -> int:
         "list": cmd_list, "index": cmd_index, "hook": lambda a: cmd_hook(a.event), "doctor": cmd_doctor,
     }
     kn_handlers = {
-        "add": cmd_kn_add, "list": cmd_kn_list, "search": cmd_kn_search,
+        "add": cmd_kn_add, "list": cmd_kn_list, "search": cmd_kn_search, "show": cmd_kn_show,
         "supersede": cmd_kn_supersede, "retire": cmd_kn_retire, "delete": cmd_kn_delete,
         "verify": cmd_kn_verify, "stale": cmd_kn_stale,
     }

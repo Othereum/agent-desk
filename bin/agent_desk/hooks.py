@@ -147,7 +147,7 @@ def knowledge_line(root: Path, project: Project) -> str | None:
     if not pn and not gn:
         return None
     line = (f"knowledge: 프로젝트 {pn}건 · 전역 {gn}건. 시스템을 조사하거나 수정하기 전에 "
-            "`adesk kn search <검색어>` 또는 `adesk kn search --path <파일>` 로 관련 항목을 확인할 것.")
+            "`adesk kn search <검색어...>` 또는 `adesk kn search --path <파일>` 로 관련 항목을 확인할 것.")
     if pn:
         marker = project.dir / DOCTOR_MARKER
         age = (dt.datetime.now().timestamp() - marker.stat().st_mtime) / 86400 if marker.exists() else None

@@ -170,18 +170,57 @@ def entries_for_path(entries: list[Entry], rel_path: str) -> list[Entry]:
     return [e for e in entries if any(glob_regex(g).match(rel_path) for g in e.items("paths"))]
 
 
+# Korean particles dropped from the end of a query word, so "플러그인을" also finds "플러그인은".
+# Longest first. The stem is a prefix of the word, so a stem match never loses a word match.
+KO_PARTICLES = sorted(("을", "를", "이", "가", "은", "는", "의", "에", "에서", "에게", "로", "으로",
+                       "와", "과", "도", "만", "까지", "부터", "처럼", "보다", "하고", "이나", "이랑"),
+                      key=len, reverse=True)
+
+
+def word_stem(word: str) -> str:
+    for p in KO_PARTICLES:
+        stem = word[:-len(p)]
+        # a stem of two characters or more: "경로" stays "경로", "worktree에서" becomes "worktree"
+        if word.endswith(p) and len(stem) >= 2:
+            return stem
+    return word
+
+
 def search_score(e: Entry, terms: list[str]) -> int:
-    fields = [(e.meta.get("title", ""), 3), (" ".join(e.items("tags")), 3),
-              (" ".join(e.items("paths")), 2), (e.body, 1)]
+    """Sum over terms. A term with spaces is matched as the whole phrase and word by word:
+    each word scores on its own, and the exact phrase adds a bonus as large again, so an
+    exact string (an error message) ranks first and a phrase that matches only scattered
+    words is still found. Field weights: title and tags 3, paths 2, body 1."""
+    fields = [(text.casefold(), w) for text, w in
+              [(e.meta.get("title", ""), 3), (" ".join(e.items("tags")), 3),
+               (" ".join(e.items("paths")), 2), (e.body, 1)]]
+
+    def best(s: str) -> int:
+        return max((w for text, w in fields if s in text), default=0)
+
     score = 0
     for t in terms:
-        score += max((w for text, w in fields if t in text.casefold()), default=0)
+        t = t.casefold().strip()
+        words = t.split()
+        if len(words) <= 1:
+            score += best(word_stem(t)) if t else 0
+            continue
+        phrase = best(t)
+        # one-character words ("수" in "찾을 수 없습니다") would match nearly everything
+        hits = [s for s in (best(word_stem(w)) for w in words if len(w) >= 2) if s]
+        # scattered words count only when at least half of them match: a long string that is
+        # not there (an error message) should not list every entry sharing one common word
+        if phrase or 2 * len(hits) >= len([w for w in words if len(w) >= 2]):
+            score += sum(hits) + phrase * len(words)
     return score
 
 
 def update_entry(e: Entry, updates: dict) -> None:
+    """A None value removes the key."""
     write_text(e.path, update_frontmatter(read_text(e.path), updates))
     e.meta.update(updates)
+    for k in [k for k, v in updates.items() if v is None]:
+        del e.meta[k]
 
 
 def write_kn_index(root: Path, project: Project | None) -> Path | None:
