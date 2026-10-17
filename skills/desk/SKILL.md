@@ -38,6 +38,7 @@ adesk new --title "제목"                  # 현재 브랜치로 태스크 생�
 adesk new --title "제목" --no-branch --slug survey-x
 adesk new --title "제목" --parent <id> [--related a,b]   # 상위·연관 태스크 지정
 adesk link <id> [--branch B]            # 태스크에 브랜치 추가
+adesk unlink <id> [--branch B]          # 브랜치 연결 해제(버린 브랜치 정리)
 adesk relate <id> [--parent P | --no-parent] [--add a,b] [--remove a,b]
 adesk focus [<id> | --clear]            # 포커스 태스크 조회·지정·해제
 adesk new --title "제목" --no-branch --slug x --todo   # 예정 태스크로 생성 (포커스 안 됨)
@@ -60,7 +61,7 @@ adesk migrate [--dry-run]               # 데이터 폴더를 현재 스키마�
 
 ID 생성, 브랜치 중복 검사, 상태 전환, 아카이브·휴지통 이동은 반드시 CLI로 한다. 폴더를 직접 만들거나 옮기거나 지우지 않는다.
 
-**frontmatter는 CLI가 쓰고, 글(본문, log.md, decisions.md)은 에이전트가 쓴다.** frontmatter 값은 전용 명령으로 바꾼다: 태스크의 제목·설계 문서·링크는 `set`, 상태는 `status`·`close`, 브랜치는 `link`, 상위·연관 태스크는 `relate`, knowledge는 `kn set`(제목·종류·location·paths·tags·sources)과 `kn verify` 등. 제목 변경은 오타 수정용이고, 일의 범위나 내용의 의미가 바뀌면 새 태스크·새 항목으로 만든다. `updated`는 CLI가 태스크 파일을 쓸 때 자동으로 바뀐다.
+**frontmatter는 CLI가 쓰고, 글(본문, log.md, decisions.md)은 에이전트가 쓴다.** frontmatter 값은 전용 명령으로 바꾼다: 태스크의 제목·설계 문서·링크는 `set`, 상태는 `status`·`close`, 브랜치는 `link`·`unlink`, 상위·연관 태스크는 `relate`, knowledge는 `kn set`(제목·종류·location·paths·tags·sources)과 `kn verify` 등. 제목 변경은 오타 수정용이고, 일의 범위나 내용의 의미가 바뀌면 새 태스크·새 항목으로 만든다. `updated`는 CLI가 태스크 파일을 쓸 때 자동으로 바뀐다.
 
 ## 저장 구조
 

@@ -187,7 +187,7 @@ def doctor_tasks(project: Project, top: Path | None, issues: list) -> None:
             gone = [b for b in t.branches if git(top, "rev-parse", "--verify", "-q", f"refs/heads/{b}") is None]
             if gone:
                 issues.append({"level": "info", "kind": "task-branch-missing", "id": t.id,
-                               "message": f"로컬에 없는 브랜치: {', '.join(gone)}. 머지 후 삭제되었다면 종료를 검토"})
+                               "message": f"로컬에 없는 브랜치: {', '.join(gone)}. 머지 후 삭제되었다면 종료를, 버린 브랜치라면 adesk unlink 를 검토"})
         updated = parse_when(t.meta.get("updated", ""))
         if updated is not None and now - updated > TASK_IDLE_DAYS * 86400:
             issues.append({"level": "info", "kind": "task-idle", "id": t.id,

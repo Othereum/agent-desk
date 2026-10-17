@@ -192,6 +192,26 @@ def cmd_link(args) -> None:
     out({"task": task.id, "branches": task.branches, "changed": True})
 
 
+def cmd_unlink(args) -> None:
+    root = ensure_root()
+    project, info = current_project(root, Path(args.cwd), args.project)
+    task = get_task(project, args.id)
+    if task.archived:
+        raise DeskError("아카이브된 태스크의 브랜치 연결은 바꿀 수 없습니다")
+    branch = args.branch or info.branch
+    if not branch:
+        raise DeskError("해제할 브랜치를 알 수 없습니다")
+    kept = [b for b in task.branches if b.casefold() != branch.casefold()]
+    if len(kept) == len(task.branches):
+        out({"task": task.id, "branches": task.branches, "changed": False})
+        return
+    set_meta(task, {"branches": kept})
+    append_log(task, [f"브랜치 연결 해제: {branch}"])
+    write_index(project)
+    out({"task": task.id, "branches": kept, "changed": True,
+         **({"warning": "연결된 브랜치가 없는 태스크가 되었습니다. adesk focus 로 포커스를 지정하거나 adesk link 로 다시 연결하세요"} if not kept else {})})
+
+
 def cmd_status(args) -> None:
     root = ensure_root()
     project, _ = current_project(root, Path(args.cwd), args.project)
@@ -857,6 +877,10 @@ def run(argv: list[str]) -> int:
     p.add_argument("id")
     p.add_argument("--branch")
 
+    p = sub.add_parser("unlink", help="태스크에서 브랜치 연결 해제")
+    p.add_argument("id")
+    p.add_argument("--branch", help="생략하면 현재 브랜치")
+
     p = sub.add_parser("status", help="열린 태스크의 상태 변경 (todo/in_progress/on_hold)")
     p.add_argument("id")
     p.add_argument("status", choices=OPEN_STATUSES)
@@ -967,7 +991,7 @@ def run(argv: list[str]) -> int:
     args = ap.parse_args(argv)
     handlers = {
         "where": cmd_where, "project-init": cmd_project_init, "new": cmd_new, "set": cmd_set,
-        "link": cmd_link, "relate": cmd_relate, "focus": cmd_focus, "status": cmd_status, "migrate": cmd_migrate, "close": cmd_close, "reopen": cmd_reopen,
+        "link": cmd_link, "unlink": cmd_unlink, "relate": cmd_relate, "focus": cmd_focus, "status": cmd_status, "migrate": cmd_migrate, "close": cmd_close, "reopen": cmd_reopen,
         "delete": cmd_delete, "restore": cmd_restore, "list": cmd_list, "index": cmd_index,
         "put": lambda a: write_desk_file(a, append=False), "append": lambda a: write_desk_file(a, append=True), "hook": lambda a: cmd_hook(a.event), "doctor": cmd_doctor,
     }
