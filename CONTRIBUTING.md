@@ -24,6 +24,7 @@ main에 들어가는 것이 곧 릴리스입니다. GitHub로 설치한 플러�
 
 ## 테스트
 
-- `python -m unittest discover -s tests`를 돌립니다. `tests/test_injection.py`는 임시 데이터 폴더·git 저장소·세션 캐시에서 hook을 실제로 실행해 장면별 주입을 `tests/snapshots/injection/*.txt` 기준과 비교하고, `tests/test_repo_invariants.py`는 스킬 frontmatter·용어·공개 문구를 검사합니다.
+- `python -m unittest discover -s tests`를 돌립니다. `tests/test_injection.py`는 임시 데이터 폴더·git 저장소·세션 캐시에서 hook을 실제로 실행해 장면별 주입을 `tests/snapshots/injection/*.txt` 기준과 비교합니다.
+- 스킬, `hooks/hooks.json`, `.claude-plugin/`의 manifest를 바꾸면 `claude plugin validate .`를 돌립니다. 루트의 CLAUDE.md는 개발용 지침이라 "플러그인 컨텍스트로 로드되지 않는다"는 경고가 나오는 것이 정상이므로 `--strict`는 쓰지 않습니다.
 - 주입이 의도대로 바뀌었으면 `AGENT_DESK_UPDATE_SNAPSHOTS=1 python -m unittest discover -s tests`로 기준을 다시 만들고 `git diff tests/snapshots`로 검토해 함께 커밋합니다.
 - 릴리스 전에는 설치한 플러그인으로 `claude -p "세션 시작 때 받은 [agent-desk] 맥락을 그대로 출력해"`를 등록된 저장소에서 한 번 실행해 hooks.json 등록과 플러그인 경로까지 동작하는지 손으로 확인합니다.

@@ -18,7 +18,8 @@ Claude Code가 어제 하던 일을 기억하게 하는 플러그인이다. 진�
 - 데이터 형식이 바뀌면 `desk.toml`의 schema_version을 검토한다.
 
 ## 테스트
-- hook·스킬·주입 코드를 바꾸면 `python -m unittest discover -s tests`로 테스트를 돌린다.
+- hook·주입·CLI 코드를 바꾸면 `python -m unittest discover -s tests`로 테스트를 돌린다.
+- 스킬, `hooks/hooks.json`, `.claude-plugin/`의 manifest를 바꾸면 `claude plugin validate .`를 돌린다. 루트 CLAUDE.md 경고는 의도한 것이므로 `--strict`는 쓰지 않는다.
 - 회귀 테스트 결과 주입 기준(tests/snapshots/)과 다르게 나오고 그게 의도한 변경이면 `AGENT_DESK_UPDATE_SNAPSHOTS=1`로 기준을 갱신하고 diff를 검토한다.
 
 ## 문구
