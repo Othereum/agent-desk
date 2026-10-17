@@ -4,6 +4,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -89,6 +90,7 @@ class Delete(unittest.TestCase):
         self.assertTrue((self.pdir / "archive" / b / "state.md").exists())
         self.assertEqual(self.ids("--deleted"), [])
         self.assertIn("휴지통에서 되살림", (self.pdir / "tasks" / a / "log.md").read_text(encoding="utf-8"))
+        self.assertNotIn("\ntrashed:", (self.pdir / "tasks" / a / "state.md").read_text(encoding="utf-8"))
         self.assertIn("휴지통에 없는", self.fail_with("restore", a))
 
     def test_purge_needs_trash_first(self):
@@ -164,10 +166,10 @@ class Delete(unittest.TestCase):
         kinds = [i["kind"] for i in self.ok("doctor")["issues"]]
         self.assertNotIn("stray-file", kinds)
         self.assertNotIn("trash-old", kinds)
-        log = tdir / "log.md"
-        text = log.read_text(encoding="utf-8")
-        head = text.rsplit("\n## ", 1)
-        log.write_text(head[0] + "\n## 2020-01-01 00:00\n" + head[1].split("\n", 1)[1], encoding="utf-8")
+        state = tdir / "state.md"
+        text = state.read_text(encoding="utf-8")
+        self.assertIn("\ntrashed: ", text)  # the trash time is metadata, not parsed from the log
+        state.write_text(re.sub(r"(?m)^trashed: .*$", "trashed: 2020-01-01 00:00", text), encoding="utf-8")
         issues = [i for i in self.ok("doctor")["issues"] if i["kind"] == "trash-old"]
         self.assertEqual([i["id"] for i in issues], [tid])
 

@@ -179,18 +179,8 @@ def find_trashed(project: Project, task_id: str) -> Task | None:
 
 
 def trashed_at(task: Task) -> str | None:
-    """When the task was moved to the trash: the time of the last log entry that says so."""
-    try:
-        text = read_text(task.dir / "log.md")
-    except OSError:
-        return None
-    when = found = None
-    for line in text.splitlines():
-        if line.startswith("## "):
-            when = line[3:].strip()
-        elif line.strip() == f"- {TRASH_LOG_LINE}":
-            found = when
-    return found
+    """When the task was moved to the trash (`trashed` in state.md, written by delete)."""
+    return task.meta.get("trashed") or None
 
 
 def get_task(project: Project, task_id: str) -> Task:
@@ -278,6 +268,8 @@ def set_meta(task: Task, updates: dict) -> None:
     updates = {**updates, "updated": today()}
     write_text(task.state_path, update_frontmatter(read_text(task.state_path), updates))
     task.meta.update(updates)
+    for k in [k for k, v in updates.items() if v is None]:
+        del task.meta[k]
 
 
 # A task may have one parent (one level only: a parent cannot itself have a parent)

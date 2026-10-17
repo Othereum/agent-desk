@@ -199,8 +199,10 @@ def update_frontmatter(text: str, updates: dict) -> str:
     out = list(fm_lines)
     # the CLI only rewrites fields it manages (status, related, branches...): an updated key is
     # written in canonical form (a block list becomes a flow list), keeping the key line's comment
+    # (a None value removes the key)
     for key in sorted((k for k in updates if k in spans), key=lambda k: spans[k]["start"], reverse=True):
         sp = spans[key]
-        out[sp["start"]:sp["end"]] = [f"{key}: {format_value(updates[key])}".rstrip() + sp["comment"]]
-    out.extend(f"{k}: {format_value(v)}".rstrip() for k, v in updates.items() if k not in spans)
+        out[sp["start"]:sp["end"]] = ([] if updates[key] is None else
+                                      [f"{key}: {format_value(updates[key])}".rstrip() + sp["comment"]])
+    out.extend(f"{k}: {format_value(v)}".rstrip() for k, v in updates.items() if k not in spans and v is not None)
     return "---\n" + "\n".join(out) + "\n---\n" + body

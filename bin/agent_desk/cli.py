@@ -266,6 +266,7 @@ def cmd_delete(args) -> None:
     dest = project.dir / TRASH_DIR / task.id
     if dest.exists():  # a leftover folder without state.md
         raise DeskError(f"휴지통에 같은 이름의 폴더가 이미 있습니다: {dest}")
+    set_meta(task, {"trashed": now_minute()})
     append_log(task, [TRASH_LOG_LINE])
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(task.dir), str(dest))
@@ -297,6 +298,7 @@ def cmd_restore(args) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(task.dir), str(dest))
     task.dir, task.archived, task.trashed = dest, archived, False
+    set_meta(task, {"trashed": None})
     append_log(task, ["휴지통에서 되살림"])
     write_index(project)
     out({"task": task.id, "status": task.status, "dir": str(dest), "archived": archived})
