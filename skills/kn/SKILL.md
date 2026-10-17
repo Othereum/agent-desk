@@ -64,7 +64,7 @@ adesk kn add --kind pitfall --title "한 문장 제목" \
 - 대체할 사실 없이 틀렸거나 더 이상 의미가 없으면 `kn retire <id> --reason "<이유>"`로 폐기한다. 파일은 남고 주입·검색에서 빠진다(`list --all`, `search --all`로 볼 수 있다). 파일을 직접 지우지 않는다(ID가 재사용되어 기존 참조가 다른 항목을 가리킬 수 있다).
 - 삭제는 **사용자가 요청할 때만** 한다. `kn delete <id>`는 내용과 파일명의 slug를 지우고 ID만 남긴다(민감 정보가 들어간 경우 등). 방금 잘못 만든 항목이면 `kn delete <id> --purge`로 파일까지 지운다. 그 ID를 참조하는 기록이 있으면 거부되니, 참조를 정리하거나 `--purge` 없이 삭제한다. 출력의 `note`(동기화·백업의 버전 기록에는 남을 수 있음)를 사용자에게 전한다.
 - 오타나 표현만 고치는 경우는 새 항목 없이 그 파일을 고친다(사본을 고쳐 `put`). 고치면서 코드와 대조해 확인했으면 `put --verified`(`kn verify`와 같은 효과).
-- 제목·`paths`·`tags`·종류·`location`은 `kn edit <id> [--title "..."] [--paths "a/**,b/*.py"] [--tags "x,y"] [--kind K] [--location L]`로 바꾼다(`paths`·`tags`는 목록 전체를 바꾼다). frontmatter는 CLI가 쓰므로 사본을 고쳐 put해도 반영되지 않는다.
+- frontmatter는 CLI가 쓰므로 사본을 고쳐 put해도 반영되지 않는다. 제목·종류·`location`·`paths`·`tags`·`sources`는 `kn set <id>`로 바꾼다: `--title`, `--kind`, `--location`, 목록은 `--add-path`/`--remove-path`(`tag`·`source`도 같은 꼴, 반복 가능), 목록 전체를 바꿀 때만 `--paths "a/**,b/*.py"`. 제목·종류 변경은 오타·분류 수정용이고, 의미가 바뀌면 새 항목을 추가하고 supersede한다.
 
 ## 낡은 항목 점검 (doctor)
 

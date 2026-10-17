@@ -623,7 +623,9 @@ def auto_updates(path: Path, kind: str | None, meta: dict | None, verified: bool
         status = meta.get("status", "valid")
         if status in KN_INACTIVE:
             raise DeskError(f"{status} 상태인 항목은 확인 표시할 수 없습니다: {path.name}")
-        auto.update({"status": "valid", "verified": now_minute(), "stale_reason": ""})
+        auto.update({"status": "valid", "verified": now_minute()})
+        if "stale_reason" in meta:
+            auto["stale_reason"] = None
     return auto
 
 
@@ -725,26 +727,34 @@ def cmd_set(args) -> None:
          "links": task_list_field(task, "links"), "changed": bool(updates)})
 
 
-def cmd_kn_edit(args) -> None:
+KN_LIST_KEYS = ("paths", "tags", "sources")
+
+
+def cmd_kn_set(args) -> None:
     root = ensure_root()
     project, _ = try_project(root, args)
     e = find_entry(root, project, args.id)
     if e.status == "deleted":
         raise DeskError(f"삭제된 항목입니다: {e.id}")
-    if e.scope == "global" and args.paths:
-        raise DeskError("전역 항목에는 --paths 를 쓸 수 없습니다. --tags 로 매칭합니다")
     if args.title is not None and not args.title.strip():
         raise DeskError("제목이 비어 있습니다")
-    given = {"title": args.title, "kind": args.kind, "location": args.location,
-             "paths": None if args.paths is None else split_csv(args.paths),
-             "tags": None if args.tags is None else split_csv(args.tags)}
-    updates = {k: v for k, v in given.items()
-               if v is not None and v != (e.items(k) if k in ("paths", "tags") else e.meta.get(k))}
+    updates = {k: v for k in ("title", "kind", "location")
+               if (v := getattr(args, k)) is not None and v != e.meta.get(k)}
+    for key in KN_LIST_KEYS:
+        one = key[:-1]  # paths -> path
+        whole, add, remove = getattr(args, key), getattr(args, f"add_{one}"), getattr(args, f"remove_{one}")
+        items = split_csv(whole) if whole is not None else list(e.items(key))
+        items += [x for x in add or [] if x not in items]
+        items = [x for x in items if x not in (remove or [])]
+        if items != e.items(key):
+            updates[key] = items
+    if e.scope == "global" and updates.get("paths"):
+        raise DeskError("전역 항목에는 paths 를 쓸 수 없습니다. tags 로 매칭합니다")
     if updates:
         update_entry(e, updates)
         write_kn_index(root, project if e.scope != "global" else None)
     out({"id": e.id, "changed": sorted(updates),
-         **{k: e.meta.get(k) for k in ("title", "kind", "paths", "tags", "location")}})
+         **{k: e.meta.get(k) for k in ("title", "kind", "location", *KN_LIST_KEYS)}})
 
 
 def cmd_doctor(args) -> None:
@@ -874,13 +884,13 @@ def run(argv: list[str]) -> int:
 
     sub.add_parser("index", help="태스크·knowledge index.md 재생성")
 
-    p = sub.add_parser("set", aliases=["edit"], help="태스크의 제목·설계 문서·링크 변경",
+    p = sub.add_parser("set", help="태스크의 제목·설계 문서·링크 변경",
                        description="상태는 status·close, 브랜치는 link, 상위·연관 태스크는 relate 로 바꾼다.")
     p.add_argument("id")
-    p.add_argument("--title")
+    p.add_argument("--title", help="제목 (오타 수정용. 일의 범위가 바뀌면 새 태스크)")
     p.add_argument("--design-doc", help="설계 문서 URL (빈 값이면 해제)")
-    p.add_argument("--add-link", "--link", dest="add_link", action="append", metavar="URL", help="링크 추가 (반복 가능)")
-    p.add_argument("--remove-link", "--unlink", dest="remove_link", action="append", metavar="URL", help="링크 제거 (반복 가능)")
+    p.add_argument("--add-link", action="append", metavar="URL", help="링크 추가 (반복 가능)")
+    p.add_argument("--remove-link", action="append", metavar="URL", help="링크 제거 (반복 가능)")
     for opts, hint in ((("--status",), "`adesk status <id> <상태>`, 종료는 `adesk close`"),
                        (("--branch", "--branches"), "`adesk link <id> --branch <브랜치>`"),
                        (("--parent", "--related"), "`adesk relate <id> --parent/--add/--remove`")):
@@ -909,14 +919,18 @@ def run(argv: list[str]) -> int:
     p.add_argument("--slug", help="파일명용 영문 슬러그")
     p.add_argument("--body", help="본문 (생략 시 안내 주석만 넣고 이후 put 으로 작성)")
     p.add_argument("--global", dest="is_global", action="store_true", help="전역 항목으로 추가")
-    p = kn.add_parser("edit", aliases=["set"], help="항목의 제목·paths·tags·종류·location 변경",
-                      description="상태는 kn verify·stale·supersede·retire 로 바꾼다.")
+    p = kn.add_parser("set", help="항목의 제목·종류·location·paths·tags·sources 변경",
+                      description="제목·종류는 오타·분류 수정용이다. 내용의 의미가 바뀌면 새 항목을 추가하고 supersede 한다. "
+                                  "상태는 kn verify·stale·supersede·retire 로 바꾼다.")
     p.add_argument("id")
     p.add_argument("--title")
     p.add_argument("--kind", choices=KN_KINDS)
-    p.add_argument("--paths", help="관련 경로 glob, 목록 전체를 바꿈 (쉼표 구분)")
-    p.add_argument("--tags", help="태그, 목록 전체를 바꿈 (쉼표 구분)")
     p.add_argument("--location", help="inline | repo:<경로> | claude-docs:<url>")
+    for key, what in (("paths", "관련 경로 glob"), ("tags", "태그"), ("sources", "출처 태스크 ID")):
+        one = key[:-1]
+        p.add_argument(f"--{key}", help=f"{what}, 목록 전체를 바꿈 (쉼표 구분)")
+        p.add_argument(f"--add-{one}", action="append", metavar=one.upper(), help=f"{what} 추가 (반복 가능)")
+        p.add_argument(f"--remove-{one}", action="append", metavar=one.upper(), help=f"{what} 제거 (반복 가능)")
     for opts, hint in ((("--status",), "`kn verify`·`kn stale`·`kn supersede`·`kn retire` 를 쓰세요"),
                        (("--verified",), "`adesk kn verify <id>` 를 쓰세요")):
         p.add_argument(*opts, nargs="?", action=refuse_option(hint), help=argparse.SUPPRESS)
@@ -953,13 +967,13 @@ def run(argv: list[str]) -> int:
 
     args = ap.parse_args(argv)
     handlers = {
-        "where": cmd_where, "project-init": cmd_project_init, "new": cmd_new, "set": cmd_set, "edit": cmd_set,
+        "where": cmd_where, "project-init": cmd_project_init, "new": cmd_new, "set": cmd_set,
         "link": cmd_link, "relate": cmd_relate, "focus": cmd_focus, "status": cmd_status, "migrate": cmd_migrate, "close": cmd_close, "reopen": cmd_reopen,
         "delete": cmd_delete, "restore": cmd_restore, "list": cmd_list, "index": cmd_index,
         "put": lambda a: write_desk_file(a, append=False), "append": lambda a: write_desk_file(a, append=True), "hook": lambda a: cmd_hook(a.event), "doctor": cmd_doctor,
     }
     kn_handlers = {
-        "add": cmd_kn_add, "edit": cmd_kn_edit, "set": cmd_kn_edit, "list": cmd_kn_list, "search": cmd_kn_search, "show": cmd_kn_show,
+        "add": cmd_kn_add, "set": cmd_kn_set, "list": cmd_kn_list, "search": cmd_kn_search, "show": cmd_kn_show,
         "supersede": cmd_kn_supersede, "retire": cmd_kn_retire, "delete": cmd_kn_delete,
         "verify": cmd_kn_verify, "stale": cmd_kn_stale,
     }

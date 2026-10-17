@@ -60,7 +60,7 @@ adesk migrate [--dry-run]               # 데이터 폴더를 현재 스키마�
 
 ID 생성, 브랜치 중복 검사, 상태 전환, 아카이브·휴지통 이동은 반드시 CLI로 한다. 폴더를 직접 만들거나 옮기거나 지우지 않는다.
 
-**frontmatter는 CLI가 쓰고, 글(본문, log.md, decisions.md)은 에이전트가 쓴다.** frontmatter 값은 전용 명령으로 바꾼다: 태스크의 제목·설계 문서·링크는 `set`, 상태는 `status`·`close`, 브랜치는 `link`, 상위·연관 태스크는 `relate`, knowledge는 `kn edit`(제목·paths·tags·kind·location)과 `kn verify` 등. `updated`는 CLI가 태스크 파일을 쓸 때 자동으로 바뀐다.
+**frontmatter는 CLI가 쓰고, 글(본문, log.md, decisions.md)은 에이전트가 쓴다.** frontmatter 값은 전용 명령으로 바꾼다: 태스크의 제목·설계 문서·링크는 `set`, 상태는 `status`·`close`, 브랜치는 `link`, 상위·연관 태스크는 `relate`, knowledge는 `kn set`(제목·종류·location·paths·tags·sources)과 `kn verify` 등. 제목 변경은 오타 수정용이고, 일의 범위나 내용의 의미가 바뀌면 새 태스크·새 항목으로 만든다. `updated`는 CLI가 태스크 파일을 쓸 때 자동으로 바뀐다.
 
 ## 저장 구조
 
@@ -139,7 +139,7 @@ CLI 인자로 넘기는 값은 CLI가 따옴표를 붙여 쓰니 그대로 넘�
 - 기각한 대안과 그 이유를 꼭 남긴다. 같은 논의를 반복하지 않게 하는 핵심 정보다.
 
 ### log.md (히스토리, 덧붙이기만)
-- `## YYYY-MM-DD HH:MM` 아래에 짧은 bullet로 적는다. 기존 항목은 수정하지 않는다.
+- `## YYYY-MM-DD HH:MM` 아래에 짧은 bullet로 적는다. 기존 항목은 수정하지 않는다. 시각은 짐작하지 말고 `date`로 확인해서 쓴다.
 - 무엇을 했는지보다 **무엇을 알아냈는지**(원인, 확인한 사실, 막힌 지점)를 중심으로 쓴다.
 
 ## 갱신 시점

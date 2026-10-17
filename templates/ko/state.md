@@ -10,7 +10,7 @@ parent: {{parent}}
 related: {{related}}
 created: {{date}}
 updated: {{date}}
-verified: {{date}}
+verified: {{datetime}}
 ---
 ## 목표
 

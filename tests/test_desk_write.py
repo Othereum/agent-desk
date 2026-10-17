@@ -184,7 +184,7 @@ class Put(DeskFixture):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn(f"updated: {TODAY}", self.entry.read_text(encoding="utf-8"))
         self.entry.write_text(with_updated, encoding="utf-8", newline="\n")
-        r = self.run_desk("--project", "p", "kn", "edit", "K0001", "--title", "새 제목")
+        r = self.run_desk("--project", "p", "kn", "set", "K0001", "--title", "새 제목")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn(f"updated: {TODAY}", self.entry.read_text(encoding="utf-8"))
 
@@ -305,11 +305,11 @@ class PreToolUseHook(DeskFixture):
 class SetTask(DeskFixture):
     def test_title_design_doc_links(self):
         r = self.run_desk("--project", "p", "set", "t1", "--title", "새: 제목 #1", "--design-doc", "https://x/doc",
-                          "--add-link", "https://x/1", "--link", "https://x/2")
+                          "--add-link", "https://x/1", "--add-link", "https://x/2")
         self.assertEqual(r.returncode, 0, r.stderr)
         out = json.loads(r.stdout)
         self.assertEqual((out["title"], out["links"], out["changed"]), ("새: 제목 #1", ["https://x/1", "https://x/2"], True))
-        r = self.run_desk("--project", "p", "edit", "t1", "--remove-link", "https://x/1", "--design-doc", "")
+        r = self.run_desk("--project", "p", "set", "t1", "--remove-link", "https://x/1", "--design-doc", "")
         self.assertEqual(r.returncode, 0, r.stderr)
         text = self.state.read_text(encoding="utf-8")
         self.assertIn('title: "새: 제목 #1"', text)
@@ -334,10 +334,14 @@ class SetTask(DeskFixture):
             self.assertIn(cmd, r.stderr)
         self.assertEqual(self.state.read_text(encoding="utf-8"), STATE)
 
+    def test_no_edit_alias(self):
+        self.assertEqual(self.run_desk("--project", "p", "edit", "t1", "--title", "x").returncode, 2)
+        self.assertEqual(self.run_desk("--project", "p", "kn", "edit", "K0001", "--title", "x").returncode, 2)
 
-class KnEdit(DeskFixture):
+
+class KnSet(DeskFixture):
     def test_edits_keys(self):
-        r = self.run_desk("--project", "p", "kn", "edit", "K0001", "--title", "새 제목", "--paths", "a/**, b/*.py",
+        r = self.run_desk("--project", "p", "kn", "set", "K0001", "--title", "새 제목", "--paths", "a/**, b/*.py",
                           "--tags", "x,y", "--kind", "finding", "--location", "repo:docs/a.md")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(json.loads(r.stdout)["changed"], ["kind", "location", "paths", "tags", "title"])
@@ -347,14 +351,40 @@ class KnEdit(DeskFixture):
         self.assertIn("본문", text)
         self.assertIn("새 제목", (self.entry.parent / "index.md").read_text(encoding="utf-8"))
 
+    def test_list_keys_add_remove(self):
+        r = self.run_desk("--project", "p", "kn", "set", "K0001", "--add-path", "b/**", "--add-path", "src/**",
+                          "--add-tag", "x", "--add-source", "t1")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = json.loads(r.stdout)
+        self.assertEqual(out["changed"], ["paths", "sources", "tags"])
+        self.assertEqual((out["paths"], out["tags"], out["sources"]), (["src/**", "b/**"], ["x"], ["t1"]))
+        r = self.run_desk("--project", "p", "kn", "set", "K0001", "--remove-path", "src/**", "--remove-tag", "none")
+        self.assertEqual(json.loads(r.stdout)["changed"], ["paths"])
+        r = self.run_desk("--project", "p", "kn", "set", "K0001", "--sources", "a,b", "--remove-source", "a")
+        self.assertEqual(json.loads(r.stdout)["sources"], ["b"])
+        text = self.entry.read_text(encoding="utf-8")
+        for line in ("paths: [b/**]", "tags: [x]", "sources: [b]"):
+            self.assertIn(line + "\n", text)
+
+    def test_global_entry_has_no_paths(self):
+        gdir = self.root / "knowledge"
+        gdir.mkdir()
+        (gdir / "G0001-x.md").write_text(ENTRY.replace("K0001", "G0001").replace("paths: [src/**]", "paths: []"),
+                                        encoding="utf-8", newline="\n")
+        r = self.run_desk("--project", "p", "kn", "set", "G0001", "--add-path", "a/**")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("전역", r.stderr)
+        r = self.run_desk("--project", "p", "kn", "set", "G0001", "--add-tag", "x")
+        self.assertEqual(r.returncode, 0, r.stderr)
+
     def test_refusals(self):
-        r = self.run_desk("--project", "p", "kn", "edit", "K0001", "--status", "valid")
+        r = self.run_desk("--project", "p", "kn", "set", "K0001", "--status", "valid")
         self.assertEqual(r.returncode, 2)
         self.assertIn("kn verify", r.stderr)
-        r = self.run_desk("--project", "p", "kn", "edit", "K0001", "--kind", "nope")
+        r = self.run_desk("--project", "p", "kn", "set", "K0001", "--kind", "nope")
         self.assertEqual(r.returncode, 2)
         self.entry.write_text("---\nid: K0001\nstatus: deleted\n---\n", encoding="utf-8", newline="\n")
-        r = self.run_desk("--project", "p", "kn", "edit", "K0001", "--title", "x")
+        r = self.run_desk("--project", "p", "kn", "set", "K0001", "--title", "x")
         self.assertEqual(r.returncode, 1)
         self.assertIn("삭제", r.stderr)
 
