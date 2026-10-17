@@ -23,8 +23,8 @@ from .model import (
 )
 from .index import write_index
 from .knowledge import (
-    KN_KINDS, all_entries, entries_for_path, entry_references, find_entry, kn_dir, load_entries, next_entry_id,
-    repo_relative, search_score, split_csv, tombstone_entry, try_project, update_entry, write_kn_index,
+    KN_KINDS, all_entries, entries_for_path, entry_references, find_entry, inject_order, kn_dir, load_entries,
+    next_entry_id, repo_relative, search_score, split_csv, tombstone_entry, try_project, update_entry, write_kn_index,
 )
 from .doctor import DOCTOR_MARKER, doctor_knowledge, doctor_tasks, project_repo
 from . import HOOK_EVENTS
@@ -309,13 +309,13 @@ def cmd_kn_search(args) -> None:
         matched = entries_for_path(entries, repo_relative(args.path, info.toplevel))
         if terms:
             matched = [e for e in matched if search_score(e, terms) > 0]
-        ranked = matched
-    else:
-        if not terms:
-            raise DeskError("검색어 또는 --path 가 필요합니다")
-        scored = sorted(((search_score(e, terms), e) for e in entries), key=lambda x: -x[0])
-        ranked = [e for s, e in scored if s > 0]
-    out([e.as_dict() for e in ranked[:args.limit]])
+        # all of them, in injection order: the hook points here for the entries it left out
+        out([e.as_dict() for e in sorted(matched, key=lambda e: inject_order(e.meta.get("kind", ""), e.id))])
+        return
+    if not terms:
+        raise DeskError("검색어 또는 --path 가 필요합니다")
+    scored = sorted(((search_score(e, terms), e) for e in entries), key=lambda x: -x[0])
+    out([e.as_dict() for s, e in scored if s > 0][:args.limit])
 
 
 def cmd_kn_supersede(args) -> None:
@@ -508,7 +508,7 @@ def run(argv: list[str]) -> int:
     p.add_argument("terms", nargs="*")
     p.add_argument("--path", help="이 파일에 해당하는 항목 (paths glob 매칭)")
     p.add_argument("--all", action="store_true", help="대체·폐기·삭제된 항목 포함")
-    p.add_argument("--limit", type=int, default=10)
+    p.add_argument("--limit", type=int, default=10, help="검색어 결과 최대 건수 (--path 에는 적용하지 않음)")
     p = kn.add_parser("supersede", help="항목을 다른 항목으로 대체")
     p.add_argument("id")
     p.add_argument("--by", required=True)

@@ -15,6 +15,13 @@ from .model import Project, get_project, load_projects, load_tasks, match_projec
 # global entries in <root>/knowledge/ (ids G0001...).
 
 KN_KINDS = ("decision", "pitfall", "finding", "howto")
+KN_INJECT_KIND_ORDER = ("pitfall", "finding", "howto", "decision")
+
+
+def inject_order(kind: str, entry_id: str) -> tuple:
+    """Sort key for entries shown for a file: pitfalls first, then newest first."""
+    rank = KN_INJECT_KIND_ORDER.index(kind) if kind in KN_INJECT_KIND_ORDER else len(KN_INJECT_KIND_ORDER)
+    return rank, -int(re.sub(r"\D", "", entry_id) or 0)
 
 
 KN_STATUSES = ("valid", "stale", "superseded", "retired", "deleted")

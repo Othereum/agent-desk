@@ -18,7 +18,7 @@ from .model import (
     Project, Task, get_focus_task, get_task, head_branch, load_tasks, match_project, projects_dir,
     resolve_session_task, stray_files, task_list_field,
 )
-from .knowledge import glob_prefix, glob_regex, kn_dir, load_entries, repo_relative
+from .knowledge import glob_prefix, glob_regex, inject_order, kn_dir, load_entries, repo_relative
 from .doctor import DOCTOR_MARKER, DOCTOR_REMIND_DAYS
 
 
@@ -142,7 +142,7 @@ def session_dir() -> Path:
 
 
 SESSION_TTL_DAYS = 7
-KN_INJECT_LIMIT = 5
+KN_INJECT_LIMIT = 15  # titles only, so this is about the size of five entries with summaries
 
 
 def safe_name(name: str | None) -> str:
@@ -270,7 +270,7 @@ def project_for_toplevel(root: Path, top: Path, cache: dict) -> Project | None:
         return None
 
 
-KN_HOOK_INDEX_FORMAT = 2  # bump when the cached entry fields change
+KN_HOOK_INDEX_FORMAT = 3  # bump when the cached entry fields change
 
 
 def kn_hook_index(root: Path, project: Project) -> list[dict]:
@@ -300,10 +300,10 @@ def kn_hook_index(root: Path, project: Project) -> list[dict]:
         pass
     entries = [{"id": e.id, "kind": e.meta.get("kind", ""), "title": e.meta.get("title", ""),
                 "status": e.status, "paths": [[g, glob_prefix(g)] for g in e.items("paths")],
-                "summary": e.summary(),
                 "location": e.meta.get("location", "inline"),
                 "stale_reason": e.meta.get("stale_reason") or ""}
                for e in load_entries(root, project) if e.live and e.items("paths")]
+    entries.sort(key=lambda e: inject_order(e["kind"], e["id"]))
     try:  # write then rename, so a concurrent session never reads a half-written file
         cache.parent.mkdir(parents=True, exist_ok=True)
         tmp = cache.with_name(f"{cache.name}.{os.getpid()}.tmp")
@@ -382,8 +382,6 @@ def post_tool_use_context(payload: dict) -> str | None:
     for e in picked:
         flags = [e["kind"]] + (["재확인 필요"] if e["status"] == "stale" else [])
         line = f"- {e['id']} ({', '.join(f for f in flags if f)}) {e['title']}"
-        if e["summary"]:
-            line += f" · {e['summary']}"
         if e["location"] and e["location"] != "inline":
             line += f" · 본문: {e['location']}"
         if e["status"] == "stale" and e["stale_reason"]:
