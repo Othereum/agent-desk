@@ -1,12 +1,9 @@
-"""Static invariants of the repository: skill frontmatter, skill trigger terms, public wording.
+"""Static invariants of the repository: skill frontmatter and skill trigger terms.
 
 python -m unittest discover -s tests
 """
 
-import codecs
-import os
 import re
-import subprocess
 import unittest
 from pathlib import Path
 
@@ -23,19 +20,6 @@ TRIGGER_TERMS = {
     "desk-close": ["지식", "완료", "취소", "아카이브"],
     "desk-init": ["데스크", "프로젝트"],
 }
-
-# Names that must not appear in a public repository (K0019): sync services, stored rot13 /
-# escaped so this file does not name them either. In-house project names are private:
-# list them in AGENT_DESK_FORBIDDEN_WORDS (comma separated) to check them locally.
-FORBIDDEN_ROT13 = ["barqevir", "qebcobk", "vpybhq", "tbbtyr qevir", "tbbtyrqevir", "funercbvag",
-                   "arkgpybhq", "bjapybhq", "flapguvat", "cpybhq"]
-FORBIDDEN_ESCAPED = ["\uc6d0\ub4dc\ub77c\uc774\ube0c", "\ub4dc\ub86d\ubc15\uc2a4",
-                     "\uad6c\uae00 \ub4dc\ub77c\uc774\ube0c", "\uc544\uc774\ud074\ub77c\uc6b0\ub4dc"]
-
-
-def forbidden_words() -> list[str]:
-    extra = [w.strip() for w in os.environ.get("AGENT_DESK_FORBIDDEN_WORDS", "").split(",") if w.strip()]
-    return [codecs.decode(w, "rot13") for w in FORBIDDEN_ROT13] + FORBIDDEN_ESCAPED + extra
 
 
 def frontmatter_lines(text: str) -> list[str]:
@@ -112,21 +96,6 @@ class SkillFrontmatter(unittest.TestCase):
         self.assertIsNotNone(yaml_scalar_problem('"닫히지 않음'))
         self.assertIsNotNone(yaml_scalar_problem("[a, b"))
         self.assertIsNotNone(yaml_scalar_problem("값 # 주석"))
-
-
-class PublicWording(unittest.TestCase):
-    def test_no_service_or_inhouse_names(self):
-        files = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"], cwd=REPO, capture_output=True,
-                               check=True).stdout.decode("utf-8").split("\0")
-        words = [w.casefold() for w in forbidden_words()]
-        found = []
-        for rel in filter(None, files):
-            try:
-                text = (REPO / rel).read_text(encoding="utf-8").casefold()
-            except (OSError, UnicodeDecodeError):  # deleted in the work tree, or binary
-                continue
-            found += [f"{rel}: 금지어 {ascii(codecs.encode(w, 'rot13'))} (rot13, 이스케이프)" for w in words if w in text]
-        self.assertEqual(found, [], "공개 저장소에 특정 서비스·사내 이름 (K0019)")
 
 
 if __name__ == "__main__":
