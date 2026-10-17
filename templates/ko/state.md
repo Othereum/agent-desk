@@ -1,7 +1,7 @@
 ---
 id: {{id}}
 title: {{title}}
-status: active
+status: {{status}}
 project: {{project}}
 branches: {{branches}}
 links: []

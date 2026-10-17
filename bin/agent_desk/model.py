@@ -8,7 +8,7 @@ import tomllib
 from pathlib import Path
 
 from .core import (
-    DEFAULT_ID_TEMPLATE, DEFAULT_SHARED_BRANCHES, DeskError, OPEN_STATUSES, PLUGIN_ROOT, TASK_FILES,
+    DEFAULT_ID_TEMPLATE, DEFAULT_SHARED_BRANCHES, DeskError, LEGACY_STATUSES, OPEN_STATUSES, PLUGIN_ROOT, TASK_FILES,
     now_minute, read_text, today, write_text,
 )
 from .frontmatter import parse_frontmatter, update_frontmatter
@@ -130,7 +130,8 @@ class Task:
 
     @property
     def status(self) -> str:
-        return self.meta.get("status", "")
+        status = self.meta.get("status", "")
+        return LEGACY_STATUSES.get(status, status)
 
     @property
     def branches(self) -> list[str]:

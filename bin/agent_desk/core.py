@@ -8,11 +8,13 @@ import tomllib
 from pathlib import Path
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 TASK_FILES = ("state.md", "decisions.md", "log.md")
-OPEN_STATUSES = ("active", "paused")
-ALL_STATUSES = ("active", "paused", "done", "abandoned")
+OPEN_STATUSES = ("todo", "in_progress", "on_hold")
+CLOSED_STATUSES = ("done", "cancelled")
+# schema 1 names, read as the new ones until `adesk migrate` rewrites them
+LEGACY_STATUSES = {"active": "in_progress", "paused": "on_hold", "abandoned": "cancelled"}
 DEFAULT_ID_TEMPLATE = "{yymmdd}-{branch}"
 DEFAULT_SHARED_BRANCHES = ["main", "master", "develop"]
 
@@ -36,16 +38,29 @@ def write_text(path: Path, text: str) -> None:
         f.write(text)
 
 
-def ensure_root() -> Path:
-    root = desk_root()
+def schema_version(root: Path) -> int | None:
+    """The data root's schema version, None when desk.toml does not exist yet."""
     marker = root / "desk.toml"
     if not marker.exists():
-        write_text(marker, f"schema_version = {SCHEMA_VERSION}\n")
-    else:
-        version = tomllib.loads(read_text(marker)).get("schema_version")
-        if version != SCHEMA_VERSION:
-            raise DeskError(
-                f"데이터 스키마 버전 불일치: 데이터={version}, 플러그인={SCHEMA_VERSION} ({marker})")
+        return None
+    return tomllib.loads(read_text(marker)).get("schema_version")
+
+
+def write_schema_version(root: Path) -> None:
+    write_text(root / "desk.toml", f"schema_version = {SCHEMA_VERSION}\n")
+
+
+def ensure_root() -> Path:
+    root = desk_root()
+    version = schema_version(root)
+    if version is None:
+        write_schema_version(root)
+    elif isinstance(version, int) and version < SCHEMA_VERSION:
+        raise DeskError(f"데이터가 이전 형식입니다(스키마 {version}, 플러그인 {SCHEMA_VERSION}). "
+                        "`adesk migrate` 로 변환한 뒤 다시 실행하세요")
+    elif version != SCHEMA_VERSION:
+        raise DeskError(f"데이터가 이 플러그인보다 새 형식입니다(스키마 {version}, 플러그인 {SCHEMA_VERSION}). "
+                        f"플러그인을 업데이트하세요 ({root / 'desk.toml'})")
     return root
 
 

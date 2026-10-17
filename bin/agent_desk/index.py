@@ -26,7 +26,7 @@ def write_index(project: Project) -> Path:
     head = "| ID | 제목 | 상태 | 브랜치 | 상위 | 갱신일 |\n|---|---|---|---|---|---|\n"
     text = (f"# {project.key} 태스크 목록\n\n"
             "<!-- desk.py index 가 생성하는 파일입니다. 직접 수정하지 마세요. -->\n\n"
-            "## 진행\n\n" + (head + "\n".join(row(t) for t in open_tasks) if open_tasks else "(없음)") +
+            "## 열린 태스크\n\n" + (head + "\n".join(row(t) for t in open_tasks) if open_tasks else "(없음)") +
             "\n\n## 아카이브\n\n" + (head + "\n".join(row(t) for t in closed) if closed else "(없음)") + "\n")
     path = project.dir / "index.md"
     write_text(path, text)

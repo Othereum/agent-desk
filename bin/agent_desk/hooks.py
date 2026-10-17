@@ -11,7 +11,9 @@ import sys
 import tomllib
 from pathlib import Path
 
-from .core import DeskError, OPEN_STATUSES, PYTHON_ALIAS_MESSAGE, desk_root, python_alias, read_text
+from .core import (
+    DeskError, OPEN_STATUSES, PYTHON_ALIAS_MESSAGE, SCHEMA_VERSION, desk_root, python_alias, read_text, schema_version,
+)
 from .frontmatter import parse_frontmatter
 from .gitinfo import RepoInfo, git, normalize_path, repo_info
 from .model import (
@@ -43,23 +45,32 @@ def session_start_context(payload: dict) -> str | None:
     branch = info.branch
     head = f"[agent-desk] 프로젝트 {project.key} · 브랜치 {branch or '(detached)'}"
     kn_line = knowledge_line(root, project)
+    if migrate_line := schema_line(root):
+        kn_line = f"{kn_line}\n{migrate_line}" if kn_line else migrate_line
     task, source = resolve_session_task(project, branch)
     if not task:
         # an unreadable task may be this branch's: say so before anything suggests a new task
         lines = ([f"{head} · 연결된 태스크 없음."] + broken_task_lines(project) +
                  [cli] + ([kn_line] if kn_line else []))
-        branchless = [t for t in load_tasks(project) if t.status in OPEN_STATUSES and not t.branches]
-        if branchless:
-            listed = ", ".join(f"{t.id}({t.meta.get('title', '')})" for t in branchless[:5])
-            more = f" 외 {len(branchless) - 5}건" if len(branchless) > 5 else ""
-            lines.append(f"진행 중인 브랜치 없는 태스크: {listed}{more}. 이어서 할 태스크면 사용자에게 확인하고 "
-                         "`adesk focus <id>` 로 포커스를 지정할 것.")
+        open_tasks = [t for t in load_tasks(project) if t.status in OPEN_STATUSES]
+        if open_tasks:
+            lines += ["", "--- 열린 태스크 ---"] + [open_task_line(t) for t in open_tasks]
+            lines.append("이어서 할 태스크면 사용자에게 확인하고, 브랜치 태스크는 그 브랜치로 전환하고 "
+                         "브랜치 없는 태스크는 `adesk focus <id>` 로 포커스를 지정할 것.")
+            lines.append("")
         return "\n".join(lines + ["태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다."])
     design_doc = task.meta.get("design_doc")
     label = "" if source == "branch" else " · 포커스"
     parts = [f"{head} · 태스크 {task.id} ({task.status}{label})",
              f"태스크 폴더: {task.dir.as_posix()}"] + ([f"설계 문서: {design_doc}"] if design_doc else []) + [
              cli] + ([kn_line] if kn_line else [])
+    others = [t for t in load_tasks(project) if t.status in OPEN_STATUSES and t.id != task.id]
+    if others:
+        children = sum(1 for t in others if t.meta.get("parent") == task.id)
+        sub = f"(하위 {children}건)" if children else ""
+        parts.append(f"다른 열린 태스크 {len(others)}건{sub}: 필요할 때 `adesk list` 로 확인할 것.")
+    if task.status == "todo":
+        parts.append("이 태스크는 착수 전(todo)이다. 작업을 시작하면 `adesk status <id> in_progress` 로 바꿀 것.")
     if source == "focus" and branch and not project.is_shared(branch):
         parts.append(f"이 브랜치({branch})에는 연결된 태스크가 없어 포커스 태스크를 표시한다. 이 브랜치의 일과 관계없을 수 있으니 "
                      "관련이 없으면 사용자에게 확인하고 새 태스크를 만들거나 `link` 로 연결할 것.")
@@ -88,6 +99,23 @@ def session_start_context(payload: dict) -> str | None:
         parts += ["", "컨텍스트가 방금 압축되었다. 압축 전 진행 내용과 결정이 state.md·decisions.md·log.md에 반영되어 있는지 확인하고, 빠진 내용이 있으면 지금 기록할 것."]
     parts += ["", "위 기록은 확인할 출발점이다. 코드와 다를 수 있으니 의존하기 전에 검증한다. 결정을 확정하거나 단계를 끝내면 바로 decisions.md·state.md·log.md에 기록한다. 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다."]
     return "\n".join(parts)
+
+
+def schema_line(root: Path) -> str | None:
+    try:
+        version = schema_version(root)
+    except (OSError, ValueError):
+        return None
+    if isinstance(version, int) and version < SCHEMA_VERSION:
+        return ("데이터가 이전 형식이라 기록을 바꾸는 CLI 명령이 거부된다. 사용자에게 `adesk migrate` 실행을 한 줄로 제안할 것"
+                "(`--dry-run` 으로 바뀔 내용을 먼저 보여 줄 수 있음).")
+    return None
+
+
+def open_task_line(task: Task) -> str:
+    where = f"브랜치 {', '.join(task.branches)}" if task.branches else "브랜치 없음"
+    parent = f" · 상위 {task.meta['parent']}" if task.meta.get("parent") else ""
+    return f"- {task.id} ({task.meta.get('title', '')}) · {task.status} · {where}{parent}"
 
 
 def broken_task_lines(project: Project) -> list[str]:
@@ -459,4 +487,5 @@ def cmd_hook(event: str) -> None:
         if output:
             print(json.dumps(output))
     except Exception as e:  # a hook must never break the session
-        print(f"agent-desk hook error: {e}", file=sys.stderr)
+        from . import hook_failure
+        hook_failure(event, e)

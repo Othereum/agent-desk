@@ -16,7 +16,8 @@ description: agent-desk 데스크의 태스크 기록(현황 state·결정 decis
 | 데스크 | agent-desk가 관리하는 기록 전체(태스크 기록 + 지식). "데스크에 남겨줘", "데스크 점검해줘" |
 | 프로젝트 | 등록한 저장소 |
 | 태스크 기록 | 태스크 하나의 현황·결정·로그 |
-| 현황 | state.md. "상태"는 태스크 상태(진행 중 active, 보류 paused, 완료 done, 중단 abandoned)에만 쓴다 |
+| 현황 | state.md. "상태"는 태스크 상태에만 쓴다 |
+| 태스크 상태 | 예정 `todo`(만들어 두고 착수 전), 진행 중 `in_progress`, 보류 `on_hold`(착수했다가 멈춤·기다림), 완료 `done`, 취소 `cancelled`(이루지 않고 종료). 앞의 셋이 **열린 태스크**, 뒤의 둘이 **종료된 태스크**(아카이브) |
 | 결정 | decisions.md의 항목(D번호). 지식의 decision 항목도 "결정"이라 부르며 문맥과 번호(D/K)로 구분한다. 둘이 함께 나오는 맥락에서는 "태스크 결정"과 "설계 결정"으로 나눠 말한다 |
 | 로그 | log.md |
 | 지식 | knowledge 항목(K·G번호). 일반적인 뜻의 지식과 구분이 필요하면 "knowledge"라고 쓴다. 종류는 설계 결정(decision)·함정(pitfall)·발견(finding)·방법(howto), 상태는 유효·재확인 필요(stale)·대체됨·폐기(retired)·삭제 |
@@ -38,12 +39,14 @@ adesk new --title "제목" --parent <id> [--related a,b]   # 상위·연관 태�
 adesk link <id> [--branch B]            # 태스크에 브랜치 추가
 adesk relate <id> [--parent P | --no-parent] [--add a,b] [--remove a,b]
 adesk focus [<id> | --clear]            # 포커스 태스크 조회·지정·해제
-adesk status <id> active|paused
-adesk close <id> done|abandoned [--note "..."]
+adesk new --title "제목" --no-branch --slug x --todo   # 예정 태스크로 생성 (포커스 안 됨)
+adesk status <id> todo|in_progress|on_hold
+adesk close <id> done|cancelled [--note "..."]
 adesk reopen <id>
 adesk index                             # 태스크·knowledge index.md 재생성
 adesk kn search|list|add|supersede|retire|delete|verify|stale ...   # knowledge (agent-desk:kn 스킬)
 adesk doctor [--apply]                  # 낡은 knowledge·충돌 사본·방치된 태스크 점검 (agent-desk:kn 스킬)
+adesk migrate [--dry-run]               # 데이터 폴더를 현재 스키마로 변환
 ```
 `--project KEY`와 `--cwd DIR`은 하위 명령 **앞에** 둔다. 출력은 JSON이다.
 
@@ -66,6 +69,7 @@ ID 생성, 브랜치 중복 검사, 상태 전환, 아카이브 이동은 반드
 
 - 사용자가 지시했을 때, 또는 이 세션에서 **새 브랜치를 만들었을 때만** 만든다. 브랜치를 만든 경우에는 만들기 전에 사용자에게 한 줄로 확인한다.
 - 그 외에는 만들지 않는다. 잠깐의 질문, 조사, 일회성 수정마다 태스크를 만들면 기록이 소음이 된다.
+- 지금 착수하지 않을 일을 잊지 않게 남겨 달라고 하면 예정 태스크(`--todo`)로 만든다. 예정 태스크를 포커스로 지정하면 진행 중이 된다. 브랜치로 매칭된 예정 태스크에서 작업을 시작하면 `status <id> in_progress`로 바꾼다.
 - 프로젝트가 등록되지 않았으면 `agent-desk:desk-init` 절차를 먼저 안내한다.
 
 ## 세션의 태스크와 포커스
@@ -73,7 +77,9 @@ ID 생성, 브랜치 중복 검사, 상태 전환, 아카이브 이동은 반드
 세션이 다루는 태스크는 다음 순서로 정해지고, SessionStart가 그 태스크를 주입한다.
 1. 현재 브랜치에 연결된 태스크
 2. 없으면 프로젝트의 **포커스 태스크** (`· 포커스`로 표시)
-3. 둘 다 없으면 태스크 없음. 진행 중인 브랜치 없는 태스크가 있으면 목록이 함께 표시된다.
+3. 둘 다 없으면 태스크 없음. 프로젝트의 열린 태스크 목록 전체가 함께 표시된다.
+
+태스크가 주입될 때는 다른 열린 태스크의 건수만 한 줄로 표시된다. 사용자가 다른 태스크를 물으면 `list`로 조회한다.
 
 - `main`에서만 개발하는 프로젝트처럼 공용 브랜치에서 일할 때는 브랜치 없는 태스크와 포커스로 운영한다. 공용 브랜치에서 `new --no-branch`로 만든 태스크는 자동으로 포커스가 되고, 그 태스크를 `close`하면 포커스도 해제된다.
 - 다른 브랜치 없는 태스크로 넘어갈 때는 사용자에게 확인하고 `focus <id>`로 바꾼다.
@@ -86,7 +92,7 @@ ID 생성, 브랜치 중복 검사, 상태 전환, 아카이브 이동은 반드
 - **상위 태스크(`parent`)**: 여러 브랜치로 나뉘어 진행되는 큰 흐름(예: 여러 모듈의 독립화)을 묶는다. 상위 태스크는 보통 브랜치 없는 태스크(`--no-branch`)으로 만들고, 각 브랜치 태스크를 `--parent`로 그 아래에 둔다. 계층은 한 단계만 허용된다.
   - 하위 태스크 세션에는 상위 태스크의 state.md 전문과 결정 제목이 함께 주입된다. 이 세션의 할 일은 하위 태스크 state.md를 따른다. **상위 태스크의 유효한 결정을 따른다.** 어긋나는 결정이 필요하면 사용자에게 확인한다.
   - 흐름 전체에 걸친 결정은 상위 태스크의 decisions.md에, 이 브랜치에만 해당하는 결정은 하위 태스크의 decisions.md에 기록한다.
-  - 상위 태스크의 state.md는 흐름 전체의 목표와 하위 태스크들의 진행 상황을 짧게 유지한다. 하위 태스크에서 단계가 끝나면 상위 태스크의 "현재 상태"도 한 줄 갱신한다.
+  - 상위 태스크의 state.md는 흐름 전체의 목표와 하위 태스크에서 나온 결과를 짧게 유지한다. 하위 태스크 목록은 `parent`로 `list`에서 알 수 있으므로 state.md에 나열하지 않는다. 하위 태스크에서 단계가 끝나거나 하위 태스크가 종료되면 상위 태스크의 "현재 상태"에 결과를 한 줄 반영한다.
 - **연관 태스크(`related`)**: 후속 태스크, 같은 영역의 이전 태스크 등 의미를 정하지 않은 참조 목록이다. 주입되지 않고 ID만 표시되므로, 필요할 때 `list --all`로 위치를 찾아 읽는다.
 
 ## 파일별 작성 규칙
@@ -162,4 +168,4 @@ frontmatter(state.md, knowledge 항목)는 YAML의 일부만 읽는다. 맨 앞 
 
 ## 종료와 재개
 
-종료는 `agent-desk:desk-close` 절차를 따른다. 잠시 멈출 때는 `status <id> paused`, 다시 시작할 때는 `status <id> active`를 쓴다.
+종료는 `agent-desk:desk-close` 절차를 따른다. 멈출 때는 `status <id> on_hold`, 다시 시작할 때는 `status <id> in_progress`를 쓴다.

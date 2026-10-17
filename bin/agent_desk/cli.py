@@ -10,10 +10,11 @@ import sys
 from pathlib import Path
 
 from .core import (
-    DEFAULT_ID_TEMPLATE, DEFAULT_SHARED_BRANCHES, DeskError, OPEN_STATUSES, PYTHON_ALIAS_MESSAGE, TASK_FILES,
-    desk_root, ensure_root, now_minute, python_alias, today, write_text,
+    CLOSED_STATUSES, DEFAULT_ID_TEMPLATE, DEFAULT_SHARED_BRANCHES, DeskError, LEGACY_STATUSES, OPEN_STATUSES,
+    PYTHON_ALIAS_MESSAGE, SCHEMA_VERSION, TASK_FILES, desk_root, ensure_root, now_minute, python_alias,
+    read_text, schema_version, today, write_schema_version, write_text,
 )
-from .frontmatter import format_scalar, format_value
+from .frontmatter import format_scalar, format_value, update_frontmatter
 from .gitinfo import repo_info
 from .model import (
     append_log, build_id, check_branch_free, children_of, current_project, get_focus_id,
@@ -100,12 +101,13 @@ def cmd_new(args) -> None:
         "id": task_id, "title": format_scalar(args.title), "project": project.key,
         "branches": format_value([branch] if branch else []),
         "parent": parent.id if parent else "", "related": format_value(related),
+        "status": "todo" if args.todo else "in_progress",
         "date": today(), "datetime": now_minute(),
     }
     for name in TASK_FILES:
         write_text(tdir / name, render_template(project.lang, name, values))
     # a branchless task created on a shared branch (or detached) becomes the focus
-    focused = (branch is None and not args.no_focus
+    focused = (branch is None and not args.no_focus and not args.todo
                and (not info.branch or project.is_shared(info.branch)))
     if focused:
         set_focus(project, task_id)
@@ -122,8 +124,12 @@ def cmd_focus(args) -> None:
     elif args.id:
         task = get_task(project, args.id)
         if task.archived or task.status not in OPEN_STATUSES:
-            raise DeskError(f"진행 중인 태스크만 포커스할 수 있습니다: {task.id} ({task.status})")
+            raise DeskError(f"열린 태스크만 포커스할 수 있습니다: {task.id} ({task.status})")
         set_focus(project, task.id)
+        if task.status == "todo":  # focusing a task is starting it
+            set_meta(task, {"status": "in_progress"})
+            append_log(task, ["상태 변경: todo → in_progress (포커스 지정)"])
+            write_index(project)
     focus = get_focus_task(project)
     out({"project": project.key, "focus": focus.id if focus else None,
          "title": focus.meta.get("title", "") if focus else None})
@@ -191,7 +197,7 @@ def cmd_status(args) -> None:
     task = get_task(project, args.id)
     if task.archived:
         raise DeskError("아카이브된 태스크입니다. adesk reopen 을 사용하세요")
-    if args.status == "active":
+    if args.status == "in_progress":
         for b in task.branches:
             check_branch_free(project, b, task.id)
     old = task.status
@@ -221,7 +227,7 @@ def cmd_close(args) -> None:
     write_index(project)
     open_children = [t.id for t in children_of(project, task.id, open_only=True)]
     out({"task": task.id, "status": args.result, "dir": str(dest), "unfocused": unfocused,
-         **({"warning": f"진행 중인 하위 태스크가 남아 있습니다: {', '.join(open_children)}"} if open_children else {})})
+         **({"warning": f"열린 하위 태스크가 남아 있습니다: {', '.join(open_children)}"} if open_children else {})})
 
 
 def cmd_reopen(args) -> None:
@@ -236,10 +242,51 @@ def cmd_reopen(args) -> None:
     import shutil
     shutil.move(str(task.dir), str(dest))
     task.dir, task.archived = dest, False
-    set_meta(task, {"status": "active"})
+    set_meta(task, {"status": "in_progress"})
     append_log(task, ["태스크 재개"])
     write_index(project)
-    out({"task": task.id, "status": "active", "dir": str(dest)})
+    out({"task": task.id, "status": "in_progress", "dir": str(dest)})
+
+
+def migrate_task_statuses(root: Path, dry_run: bool) -> list[dict]:
+    """Schema 1 → 2: active/paused/abandoned become in_progress/on_hold/cancelled."""
+    changed = []
+    for p in load_projects(root):
+        touched = False
+        for t in load_tasks(p, include_archive=True):
+            old = t.meta.get("status", "")
+            if old in LEGACY_STATUSES:
+                changed.append({"project": p.key, "task": t.id, "from": old, "to": LEGACY_STATUSES[old]})
+                if not dry_run:
+                    write_text(t.state_path, update_frontmatter(read_text(t.state_path),
+                                                                {"status": LEGACY_STATUSES[old]}))
+                    touched = True
+        if touched:
+            write_index(p)
+    return changed
+
+
+MIGRATIONS = {1: migrate_task_statuses}  # from version N to N + 1
+
+
+def cmd_migrate(args) -> None:
+    root = desk_root()
+    version = schema_version(root)
+    if version is None or version == SCHEMA_VERSION:
+        out({"schema_version": version or SCHEMA_VERSION, "changed": [], "note": "변환할 것이 없습니다"})
+        return
+    if not isinstance(version, int) or version > SCHEMA_VERSION:
+        raise DeskError(f"이 플러그인보다 새 형식이거나 알 수 없는 스키마입니다: {version}. 플러그인을 업데이트하세요")
+    broken = [f"{p.key}/{t.id}" for p in load_projects(root) for t in load_tasks(p, include_archive=True)
+              if t.status == "?"]
+    if broken:
+        raise DeskError(f"state.md frontmatter를 읽을 수 없는 태스크가 있어 변환할 수 없습니다: {', '.join(broken)}. 먼저 고치세요")
+    changed = []
+    for v in range(version, SCHEMA_VERSION):
+        changed += MIGRATIONS[v](root, args.dry_run)
+    if not args.dry_run:
+        write_schema_version(root)
+    out({"from": version, "to": SCHEMA_VERSION, "dry_run": args.dry_run, "changed": changed})
 
 
 def cmd_list(args) -> None:
@@ -457,6 +504,7 @@ def run(argv: list[str]) -> int:
     p.add_argument("--parent", help="상위 태스크 ID (한 단계만 허용)")
     p.add_argument("--related", help="연관 태스크 ID (쉼표 구분)")
     p.add_argument("--no-focus", action="store_true", help="브랜치 없는 태스크를 만들어도 포커스로 지정하지 않음")
+    p.add_argument("--todo", action="store_true", help="착수 전(todo) 태스크로 만듦. 포커스로 지정하지 않음")
 
     p = sub.add_parser("focus", help="포커스 태스크 조회·지정·해제 (브랜치에 연결된 태스크가 없을 때 쓰는 태스크)")
     p.add_argument("id", nargs="?")
@@ -474,13 +522,13 @@ def run(argv: list[str]) -> int:
     p.add_argument("id")
     p.add_argument("--branch")
 
-    p = sub.add_parser("status", help="태스크 상태 변경 (active/paused)")
+    p = sub.add_parser("status", help="열린 태스크의 상태 변경 (todo/in_progress/on_hold)")
     p.add_argument("id")
     p.add_argument("status", choices=OPEN_STATUSES)
 
     p = sub.add_parser("close", help="태스크 종료 후 아카이브")
     p.add_argument("id")
-    p.add_argument("result", choices=("done", "abandoned"))
+    p.add_argument("result", choices=CLOSED_STATUSES)
     p.add_argument("--note")
 
     p = sub.add_parser("reopen", help="아카이브된 태스크 재개")
@@ -490,6 +538,9 @@ def run(argv: list[str]) -> int:
     p.add_argument("--all", action="store_true", help="아카이브 포함")
 
     sub.add_parser("index", help="태스크·knowledge index.md 재생성")
+
+    p = sub.add_parser("migrate", help="데이터 폴더를 현재 스키마로 변환")
+    p.add_argument("--dry-run", action="store_true", help="바꿀 내용만 출력")
 
     kn = sub.add_parser("kn", help="knowledge 항목 관리").add_subparsers(dest="kn_cmd", required=True)
     p = kn.add_parser("add", help="항목 추가")
@@ -534,7 +585,7 @@ def run(argv: list[str]) -> int:
     args = ap.parse_args(argv)
     handlers = {
         "where": cmd_where, "project-init": cmd_project_init, "new": cmd_new,
-        "link": cmd_link, "relate": cmd_relate, "focus": cmd_focus, "status": cmd_status, "close": cmd_close, "reopen": cmd_reopen,
+        "link": cmd_link, "relate": cmd_relate, "focus": cmd_focus, "status": cmd_status, "migrate": cmd_migrate, "close": cmd_close, "reopen": cmd_reopen,
         "list": cmd_list, "index": cmd_index, "hook": lambda a: cmd_hook(a.event), "doctor": cmd_doctor,
     }
     kn_handlers = {
