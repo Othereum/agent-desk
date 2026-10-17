@@ -196,6 +196,7 @@ _함정 · 원인 · 방법_`"]
 
 세부 동작과 규칙은 에이전트가 따르는 스킬에 있습니다.
 
+- [설계 원칙](docs/design-principles.md): 기능과 동작을 정할 때 지키는 기본 원칙
 - [`desk`](skills/desk/SKILL.md): 용어, 태스크 생성 기준, 기록 규칙, 세션의 태스크와 상위 태스크, 문서 위치 기준
 - [`kn`](skills/kn/SKILL.md): 지식 형식, 기록·수정 규칙, 데스크 점검
 - [`desk-new`](skills/desk-new/SKILL.md) · [`desk-close`](skills/desk-close/SKILL.md) · [`desk-init`](skills/desk-init/SKILL.md): 절차
