@@ -1,0 +1,49 @@
+# 압축 뒤에는 기록 보완을 지시한다 (K0009)
+
+=== SessionStart compact
+[additionalContext SessionStart]
+[agent-desk] 프로젝트 myapp · 브랜치 feature/login · 태스크 <YYMMDD>-feature__login (in_progress)
+태스크 폴더: <TMP>/desk/projects/myapp/tasks/<YYMMDD>-feature__login
+CLI: Bash 도구에서 `adesk ...`로 실행한다.
+
+--- state.md ---
+---
+id: <YYMMDD>-feature__login
+title: 로그인 기능
+status: in_progress
+project: myapp
+branches: [feature/login]
+links: []
+design_doc:
+parent:
+related: []
+created: <DATE>
+updated: <DATE>
+verified: <DATE>
+---
+## 목표
+
+로그인 기능을 만든다.
+
+## 현재 상태
+
+- 로그인 API 완료.
+
+## 다음 할 일
+
+- 토큰 갱신
+
+## 미해결 질문
+
+- 없음
+
+## 핵심 파일
+
+## 관련 지식
+
+--- 결정 목록 (본문은 decisions.md) ---
+- D1. 세션 캐시는 Redis에 둔다  (2026-01-01, 유효)
+
+컨텍스트가 방금 압축되었다. 압축 전 진행 내용과 결정이 state.md·decisions.md·log.md에 반영되어 있는지 확인하고, 빠진 내용이 있으면 지금 기록할 것.
+
+위 기록은 확인할 출발점이다. 코드와 다를 수 있으니 의존하기 전에 검증한다. 결정을 확정하거나 단계를 끝내면 바로 decisions.md·state.md·log.md에 기록한다. 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다.

@@ -1,0 +1,40 @@
+# 착수 전(todo) 태스크면 시작할 때 상태를 바꾸라고 안내한다
+
+=== SessionStart startup
+[additionalContext SessionStart]
+[agent-desk] 프로젝트 myapp · 브랜치 feature/search · 태스크 <YYMMDD>-feature__search (todo)
+태스크 폴더: <TMP>/desk/projects/myapp/tasks/<YYMMDD>-feature__search
+CLI: Bash 도구에서 `adesk ...`로 실행한다.
+이 태스크는 착수 전(todo)이다. 작업을 시작하면 `adesk status <id> in_progress` 로 바꿀 것.
+
+--- state.md ---
+---
+id: <YYMMDD>-feature__search
+title: 검색 개선
+status: todo
+project: myapp
+branches: [feature/search]
+links: []
+design_doc:
+parent:
+related: []
+created: <DATE>
+updated: <DATE>
+verified: <DATE>
+---
+## 목표
+
+## 현재 상태
+
+## 다음 할 일
+
+## 미해결 질문
+
+## 핵심 파일
+
+## 관련 지식
+
+--- 결정 목록 (본문은 decisions.md) ---
+(없음)
+
+위 기록은 확인할 출발점이다. 코드와 다를 수 있으니 의존하기 전에 검증한다. 결정을 확정하거나 단계를 끝내면 바로 decisions.md·state.md·log.md에 기록한다. 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다.

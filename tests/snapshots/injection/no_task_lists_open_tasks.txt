@@ -1,0 +1,13 @@
+# 공용 브랜치에 태스크가 없으면 열린 태스크 전체를 보여 준다 (README 나중에 할 일 남겨 두기, K0041)
+
+=== SessionStart startup (main, 태스크 없음)
+[additionalContext SessionStart]
+[agent-desk] 프로젝트 myapp · 브랜치 main · 연결된 태스크 없음.
+CLI: Bash 도구에서 `adesk ...`로 실행한다.
+
+--- 열린 태스크 ---
+- <YYMMDD>-feature__login (로그인 기능) · in_progress · 브랜치 feature/login
+- <YYMMDD>-search-improve (검색 개선) · todo · 브랜치 없음
+이어서 할 태스크면 사용자에게 확인하고, 브랜치 태스크는 그 브랜치로 전환하고 브랜치 없는 태스크는 `adesk focus <id>` 로 포커스를 지정할 것.
+
+태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다.

@@ -1,0 +1,40 @@
+# 상위 태스크 세션은 하위 태스크 건수만 한 줄로 알린다 (K0041)
+
+=== SessionStart startup (main, 상위 태스크 포커스)
+[additionalContext SessionStart]
+[agent-desk] 프로젝트 myapp · 브랜치 main · 태스크 <YYMMDD>-v1 (in_progress · 포커스)
+태스크 폴더: <TMP>/desk/projects/myapp/tasks/<YYMMDD>-v1
+CLI: Bash 도구에서 `adesk ...`로 실행한다.
+다른 열린 태스크 2건(하위 2건): 필요할 때 `adesk list` 로 확인할 것.
+
+--- state.md ---
+---
+id: <YYMMDD>-v1
+title: 1.0 준비
+status: in_progress
+project: myapp
+branches: []
+links: []
+design_doc:
+parent:
+related: []
+created: <DATE>
+updated: <DATE>
+verified: <DATE>
+---
+## 목표
+
+## 현재 상태
+
+## 다음 할 일
+
+## 미해결 질문
+
+## 핵심 파일
+
+## 관련 지식
+
+--- 결정 목록 (본문은 decisions.md) ---
+(없음)
+
+위 기록은 확인할 출발점이다. 코드와 다를 수 있으니 의존하기 전에 검증한다. 결정을 확정하거나 단계를 끝내면 바로 decisions.md·state.md·log.md에 기록한다. 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다.

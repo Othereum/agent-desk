@@ -1,0 +1,8 @@
+# 데이터 루트의 기록 파일을 고친 뒤 frontmatter가 깨졌으면 알린다
+
+=== PostToolUse Edit state.md (정상)
+(출력 없음)
+
+=== PostToolUse Edit state.md (frontmatter 깨짐)
+[additionalContext PostToolUse]
+[agent-desk] 방금 수정한 <TMP>/desk/projects/myapp/tasks/<YYMMDD>-feature__login/state.md 의 frontmatter를 읽을 수 없다: frontmatter 3번째 줄: 따옴표가 닫히지 않았습니다: title: "로그인. agent-desk:desk 스킬의 frontmatter 형식에 맞게 고칠 것.

@@ -1,0 +1,73 @@
+# 하위 태스크 세션에 상위 태스크 현황과 결정 목록을 함께 주입한다 (K0026)
+
+=== SessionStart startup (하위 태스크)
+[additionalContext SessionStart]
+[agent-desk] 프로젝트 myapp · 브랜치 feature/login · 태스크 <YYMMDD>-feature__login (in_progress)
+태스크 폴더: <TMP>/desk/projects/myapp/tasks/<YYMMDD>-feature__login
+CLI: Bash 도구에서 `adesk ...`로 실행한다.
+다른 열린 태스크 2건: 필요할 때 `adesk list` 로 확인할 것.
+
+--- state.md ---
+---
+id: <YYMMDD>-feature__login
+title: 로그인 기능
+status: in_progress
+project: myapp
+branches: [feature/login]
+links: []
+design_doc:
+parent: <YYMMDD>-v1
+related: []
+created: <DATE>
+updated: <DATE>
+verified: <DATE>
+---
+## 목표
+
+## 현재 상태
+
+## 다음 할 일
+
+## 미해결 질문
+
+## 핵심 파일
+
+## 관련 지식
+
+--- 결정 목록 (본문은 decisions.md) ---
+(없음)
+
+--- 상위 태스크 <YYMMDD>-v1 state.md (폴더: <TMP>/desk/projects/myapp/tasks/<YYMMDD>-v1) ---
+---
+id: <YYMMDD>-v1
+title: 1.0 준비
+status: in_progress
+project: myapp
+branches: []
+links: []
+design_doc:
+parent:
+related: []
+created: <DATE>
+updated: <DATE>
+verified: <DATE>
+---
+## 목표
+
+1.0을 낸다.
+
+## 현재 상태
+
+## 다음 할 일
+
+## 미해결 질문
+
+## 핵심 파일
+
+## 관련 지식
+
+--- 상위 태스크 결정 목록 (본문은 상위 태스크의 decisions.md) ---
+- D1. 1.0 기준  (2026-01-01, 유효)
+상위 태스크는 흐름 전체의 맥락이다. 이 세션의 할 일은 하위 태스크 state.md를 따르고, 상위 태스크의 유효한 결정을 따른다. 어긋나는 결정이 필요하면 사용자에게 확인하고 상위 태스크의 decisions.md에 기록할 것.
+
+위 기록은 확인할 출발점이다. 코드와 다를 수 있으니 의존하기 전에 검증한다. 결정을 확정하거나 단계를 끝내면 바로 decisions.md·state.md·log.md에 기록한다. 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다.

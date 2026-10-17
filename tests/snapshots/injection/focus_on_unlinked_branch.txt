@@ -1,0 +1,40 @@
+# 태스크 없는 개인 브랜치에서 포커스를 보이면 관련 여부를 확인하라고 한다
+
+=== SessionStart startup (태스크 없는 브랜치, 포커스)
+[additionalContext SessionStart]
+[agent-desk] 프로젝트 myapp · 브랜치 feature/misc · 태스크 <YYMMDD>-docs (in_progress · 포커스)
+태스크 폴더: <TMP>/desk/projects/myapp/tasks/<YYMMDD>-docs
+CLI: Bash 도구에서 `adesk ...`로 실행한다.
+이 브랜치(feature/misc)에는 연결된 태스크가 없어 포커스 태스크를 표시한다. 이 브랜치의 일과 관계없을 수 있으니 관련이 없으면 사용자에게 확인하고 새 태스크를 만들거나 `link` 로 연결할 것.
+
+--- state.md ---
+---
+id: <YYMMDD>-docs
+title: 문서 정리
+status: in_progress
+project: myapp
+branches: []
+links: []
+design_doc:
+parent:
+related: []
+created: <DATE>
+updated: <DATE>
+verified: <DATE>
+---
+## 목표
+
+## 현재 상태
+
+## 다음 할 일
+
+## 미해결 질문
+
+## 핵심 파일
+
+## 관련 지식
+
+--- 결정 목록 (본문은 decisions.md) ---
+(없음)
+
+위 기록은 확인할 출발점이다. 코드와 다를 수 있으니 의존하기 전에 검증한다. 결정을 확정하거나 단계를 끝내면 바로 decisions.md·state.md·log.md에 기록한다. 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다.
