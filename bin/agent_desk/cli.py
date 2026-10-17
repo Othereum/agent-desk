@@ -269,8 +269,11 @@ def cmd_delete(args) -> None:
     append_log(task, [TRASH_LOG_LINE])
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(task.dir), str(dest))
+    unfocused = (get_focus_id(project) or "").casefold() == task.id.casefold()
+    if unfocused:  # as close does: restoring the task does not bring the focus back
+        set_focus(project, None)
     write_index(project)
-    out({"task": task.id, "status": task.status, "dir": str(dest), "deleted": True})
+    out({"task": task.id, "status": task.status, "dir": str(dest), "deleted": True, "unfocused": unfocused})
 
 
 def cmd_restore(args) -> None:

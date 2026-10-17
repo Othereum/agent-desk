@@ -116,14 +116,13 @@ class Delete(unittest.TestCase):
         self.assertIn("feat", self.fail_with("restore", tid))
         self.assertTrue((self.pdir / "trash" / tid).exists())
 
-    def test_focus_on_trashed_task_is_ignored(self):
+    def test_delete_clears_focus(self):
         tid = self.ok("new", "--title", "f", "--no-branch", "--slug", "f")["task"]  # on main: focused
         self.assertEqual(get_focus_task(self.project).id, tid)
-        self.ok("delete", tid)
+        self.assertTrue(self.ok("delete", tid)["unfocused"])
+        self.assertIsNone(self.ok("where")["focus"])
+        self.ok("restore", tid)  # like close and reopen: the focus does not come back
         self.assertIsNone(get_focus_task(self.project))
-        self.assertIsNone(self.ok("where")["task"])
-        self.ok("restore", tid)
-        self.assertEqual(get_focus_task(self.project).id, tid)
 
     def test_id_collisions(self):
         tid = self.new("a")
