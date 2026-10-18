@@ -73,7 +73,7 @@ adesk doctor [--apply]                  # 낡은 knowledge·충돌 사본·방�
 adesk index                             # 태스크·knowledge index.md 재생성
 adesk migrate [--dry-run]               # 데이터 폴더를 현재 스키마로 변환
 ```
-`--project KEY`와 `--cwd DIR`은 하위 명령 **앞에** 둔다. 출력은 JSON이다(`focus`만 태스크 기록 텍스트).
+`--project KEY`와 `--cwd DIR`은 하위 명령 **앞에** 둔다. 출력은 JSON이다(`focus`는 태스크 기록 텍스트, `kn list`는 항목당 한 줄 텍스트).
 
 ID 생성, 브랜치 중복 검사, 상태 전환, 아카이브·휴지통 이동은 반드시 CLI로 한다. 폴더를 직접 만들거나 옮기거나 지우지 않는다.
 
