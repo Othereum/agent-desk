@@ -424,7 +424,8 @@ def cmd_kn_list(args) -> None:
     entries = all_entries(root, project)
     if not args.all:
         entries = [e for e in entries if e.live]
-    out([e.as_dict() for e in entries])
+    # text, one line each: a full list is for scanning, `kn show` gives the rest
+    print("\n".join(e.oneline() for e in entries))
 
 
 def cmd_kn_search(args) -> None:
@@ -963,8 +964,9 @@ def run(argv: list[str]) -> int:
     for opts, hint in ((("--status",), "`kn verify`·`kn stale`·`kn supersede`·`kn retire` 를 쓰세요"),
                        (("--verified",), "`adesk kn verify <id>` 를 쓰세요")):
         p.add_argument(*opts, nargs="?", action=refuse_option(hint), help=argparse.SUPPRESS)
-    p = kn.add_parser("list", help="항목 목록 (프로젝트 + 전역)")
+    p = kn.add_parser("list", help="항목 목록, 한 줄씩 (프로젝트 + 전역)")
     p.add_argument("--all", action="store_true", help="대체·폐기·삭제된 항목 포함")
+    p.add_argument("--oneline", "--brief", action="store_true", help=argparse.SUPPRESS)  # already one line (K0035)
     p = kn.add_parser("search", help="항목 검색")
     p.add_argument("terms", nargs="*", help="검색어. 공백이 든 검색어는 구절 그대로와 단어별로 함께 찾는다")
     p.add_argument("--path", action=Once, help="이 파일에 해당하는 항목 (paths glob 매칭, 파일 하나)")

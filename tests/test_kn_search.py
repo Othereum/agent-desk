@@ -52,6 +52,17 @@ class SearchScore(unittest.TestCase):
         self.assertGreater(search_score(e, ["플러그인을"]), 0)
 
 
+class OneLine(unittest.TestCase):
+    def test_fields(self):
+        e = Entry("K0002", Path("K0002.md"), {"kind": "pitfall", "title": "제목", "status": "valid"}, "본문", "p")
+        self.assertEqual(e.oneline(), "K0002 pitfall  valid      제목")
+
+    def test_superseded_shows_replacement(self):
+        e = Entry("K0002", Path("K0002.md"), {"kind": "decision", "title": "제목", "status": "superseded",
+                                              "superseded_by": "K0046"}, "", "p")
+        self.assertEqual(e.oneline(), "K0002 decision superseded → K0046 제목")
+
+
 class FrontmatterRemove(unittest.TestCase):
     def test_none_removes_key(self):
         text = "---\nid: K1\nstale_reason: x\nstatus: stale\n---\nbody\n"

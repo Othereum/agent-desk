@@ -64,6 +64,10 @@ class Entry:
                 "verified": self.meta.get("verified", ""), "summary": self.summary(),
                 "file": self.path.as_posix()}
 
+    def oneline(self) -> str:
+        status = self.status + (f" → {self.meta['superseded_by']}" if self.meta.get("superseded_by") else "")
+        return f"{self.id} {self.meta.get('kind', ''):<8} {status:<10} {self.meta.get('title', '')}"
+
 
 def kn_dir(root: Path, project: Project | None) -> Path:
     return project.dir / "knowledge" if project else root / "knowledge"
