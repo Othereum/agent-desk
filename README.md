@@ -199,7 +199,7 @@ _함정 · 원인 · 방법_`"]
 - [설계 원칙](docs/design-principles.md): 기능과 동작을 정할 때 지키는 기본 원칙
 - [`desk`](skills/desk/SKILL.md): 용어, 태스크 생성 기준, 기록 규칙, 세션의 태스크와 상위 태스크, 문서 위치 기준
 - [`kn`](skills/kn/SKILL.md): 지식 형식, 기록·수정 규칙, 데스크 점검
-- [`desk-new`](skills/desk-new/SKILL.md) · [`desk-close`](skills/desk-close/SKILL.md) · [`desk-init`](skills/desk-init/SKILL.md): 절차
+- `desk` 절차: [태스크 생성](skills/desk/new.md) · [종료](skills/desk/close.md) · [프로젝트 등록](skills/desk/init.md)
 - CLI: `python bin/desk.py --help`. Claude Code의 셸 도구(Bash, PowerShell)에서는 플러그인 `bin/`이 PATH에 들어가므로 `adesk --help`로 실행할 수 있습니다.
 - 테스트: `python -m unittest discover -s tests`
 

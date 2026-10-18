@@ -300,7 +300,7 @@ def touch_task(task_dir: Path) -> bool:
 # them), so writes of decisions.md check them (K0045). Examples inside <!-- --> are not entries.
 DECISION_LINE = re.compile(r"^## (D\d+\..*)$", re.M)
 DECISION_LIKE = re.compile(r"#{1,6}[ \t]*D(\d+)")  # a heading meant as a decision, well formed or not
-# a knowledge id may follow the parenthesis (`→ K0012`, desk-close)
+# a knowledge id may follow the parenthesis (`→ K0012`, skills/desk/close.md)
 DECISION_HEAD = re.compile(r"## D(\d+)\. \S.*  \(\d{4}-\d{2}-\d{2}, [^)\s][^)]*\)(?:\s+→\s*\S.*)?")
 
 
