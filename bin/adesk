@@ -2,14 +2,23 @@
 # agent-desk CLI for shells that have the plugin bin/ on PATH (Claude Code's Bash tool).
 # Skips Windows app execution aliases (...\WindowsApps\python.exe): starting Python
 # through one adds about 0.1s, or opens the Store when Python is not installed.
+# Walks every PATH entry because an alias often comes before the real Python.
 desk="$(dirname "$0")/desk.py"
 fallback=
+set -f
 for name in python3 python; do
-  py=$(command -v "$name") || continue
-  case "$py" in
-    *[Ww]indows[Aa]pps*) fallback=${fallback:-$py} ;;
-    *) exec "$py" "$desk" "$@" ;;
-  esac
+  IFS=:
+  for dir in $PATH; do
+    for py in "${dir:-.}/$name" "${dir:-.}/$name.exe"; do
+      [ -x "$py" ] && [ ! -d "$py" ] || continue
+      case "$py" in
+        *[Ww]indows[Aa]pps*) fallback=${fallback:-$py} ;;
+        *) exec "$py" "$desk" "$@" ;;
+      esac
+      break
+    done
+  done
+  unset IFS
 done
 if [ -n "$fallback" ]; then
   exec "$fallback" "$desk" "$@"

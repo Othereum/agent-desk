@@ -29,7 +29,7 @@ description: agent-desk 데스크의 태스크 기록(현황 state·결정 decis
 
 ## CLI
 
-Bash 도구에서 `adesk`로 실행한다(Claude Code가 플러그인 `bin/`을 Bash 도구의 PATH에 넣는다). PowerShell 등 다른 셸이거나 `adesk`를 찾지 못하면 `adesk` 대신 이 스킬의 base directory 기준 `../../bin/desk.py`를 `python`으로 실행한다.
+`adesk`로 실행한다. Claude Code가 플러그인 `bin/`을 셸 도구의 PATH에 넣고, Bash는 `bin/adesk`, PowerShell·cmd는 `bin/adesk.cmd`를 쓴다. `adesk`를 찾지 못하면 `adesk` 대신 이 스킬의 base directory 기준 `../../bin/desk.py`를 `python`으로 실행한다.
 
 ```
 # 조회
