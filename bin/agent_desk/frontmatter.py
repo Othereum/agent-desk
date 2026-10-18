@@ -1,4 +1,4 @@
-"""Frontmatter of state.md and knowledge entries.
+"""Frontmatter of state.md.
 
 A defined subset of YAML, read strictly so a file is never silently misread:
 - `key: value` at column 0. Values are strings: plain, "double-quoted" (\\ \" \n \t escapes)

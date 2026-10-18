@@ -5,7 +5,7 @@ Requires Python 3.11+ (tomllib). Standard library only.
 
 Modules, each importing only from those before it:
 core (constants, errors, io) → frontmatter → gitinfo → model (projects, tasks, relations, session task)
-→ index → knowledge → doctor → hooks → cli (commands, argparse).
+→ index → doctor → hooks → cli (commands, argparse).
 
 Hooks run on every tool use and each import adds startup time: the hook path imports
 hooks only (not cli), argparse/shutil/subprocess are imported where used, and
@@ -22,7 +22,7 @@ HOOK_FAILURE_EFFECT = {  # what the user lost, by event
     "session-start": "태스크 기록 주입이 빠졌습니다",
     # the tool call goes ahead unchecked: a desk file may have been edited by Edit/Write
     "pre-tool-use": "데스크 파일 편집 차단이 동작하지 않았습니다(이 도구 호출은 검사 없이 진행됨)",
-    "post-tool-use": "knowledge 주입(또는 worktree 전환 알림)이 빠졌습니다",
+    "post-tool-use": "worktree 전환 알림(또는 데스크 파일 검사)이 빠졌습니다",
     "user-prompt-submit": "작업 위치 변경 알림이 빠졌습니다",
 }
 

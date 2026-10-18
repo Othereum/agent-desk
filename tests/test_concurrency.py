@@ -81,25 +81,6 @@ class FileLock(unittest.TestCase):
         self.assertFalse(path.exists())
 
 
-class ParallelKnAdd(unittest.TestCase):
-    def test_ids_are_unique(self):
-        with tempfile.TemporaryDirectory() as d:
-            repo, root = Path(d) / "repo", Path(d) / "root"
-            repo.mkdir()
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
-            env = {**os.environ, "AGENT_DESK_ROOT": str(root)}
-            desk = [sys.executable, str(BIN / "desk.py"), "--cwd", str(repo)]
-            subprocess.run(desk + ["project-init", "p"], env=env, check=True, capture_output=True)
-            procs = [subprocess.Popen(desk + ["kn", "add", "--kind", "finding", "--title", f"t{i}", "--slug", f"s{i}"],
-                                      env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-                     for i in range(6)]
-            for p in procs:
-                _, err = p.communicate()  # closes the pipe, or unittest warns about it
-                self.assertEqual(p.returncode, 0, err.decode("utf-8", "replace"))
-            ids = [f.name.split("-")[0] for f in (root / "projects" / "p" / "knowledge").glob("K*.md")]
-            self.assertEqual(sorted(ids), [f"K{i:04d}" for i in range(1, 7)])
-
-
 class RootLock(unittest.TestCase):
     def test_name_is_per_data_root(self):
         with tempfile.TemporaryDirectory() as d:
@@ -147,7 +128,7 @@ class ParallelCommands(DeskRepo):
         others = [self.new_task(f"b{i}") for i in range(4)]
         procs = [self.popen("relate", a, "--add", b) for b in others]
         procs += [self.popen("link", a, "--branch", f"br{i}") for i in range(4)]
-        procs += [self.popen("kn", "add", "--kind", "finding", "--title", f"t{i}") for i in range(2)]
+        procs += [self.popen("new", "--title", f"c{i}", "--no-branch", "--no-focus", "--slug", f"c{i}") for i in range(2)]
         self.wait_ok(procs)
         task = json.loads(self.run_desk("list").stdout)[0]
         self.assertEqual(task["id"], a)
@@ -164,7 +145,7 @@ class LockScope(DeskRepo):
     def test_read_commands_do_not_wait_and_writes_do(self):
         a = self.new_task("a")
         with root_lock(self.root):
-            for args in (["where"], ["list"], ["kn", "list"], ["kn", "search", "x"], ["doctor"]):
+            for args in (["where"], ["list"], ["doctor"]):
                 start = time.monotonic()
                 self.run_desk(*args)
                 self.assertLess(time.monotonic() - start, 5, args)

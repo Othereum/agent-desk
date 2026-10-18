@@ -21,6 +21,7 @@ TODAY = dt.date.today().isoformat()
 def touched(text: str) -> str:
     """STATE-based text as the CLI writes it: `updated` set to today."""
     return text.replace("updated: 2026-01-01", f"updated: {TODAY}")
+# a knowledge entry of releases before 0.10: kept in the data root, no longer read
 ENTRY = "---\nid: K0001\ntitle: 항목\nkind: pitfall\npaths: [src/**]\nstatus: valid\n---\n본문\n"
 
 
@@ -74,13 +75,18 @@ class Put(DeskFixture):
         self.assertEqual(self.state.read_text(encoding="utf-8"), touched(STATE.replace("본문", "새 본문")))
 
     def test_body_only_copy(self):
-        for target, body in ((self.state, "## 목표\n\n본문만\n"), (self.entry, "새 본문\n")):
-            before = target.read_text(encoding="utf-8")
-            r = self.run_desk("put", str(target), "--file", self.scratch_file(body))
-            self.assertEqual(r.returncode, 0, r.stderr)
-            self.assertNotIn("kept", json.loads(r.stdout))
-            fm = before[:before.index("---\n", 4) + 4]
-            self.assertEqual(target.read_text(encoding="utf-8"), touched(fm) + body)
+        body = "## 목표\n\n본문만\n"
+        r = self.run_desk("put", str(self.state), "--file", self.scratch_file(body))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("kept", json.loads(r.stdout))
+        fm = STATE[:STATE.index("---\n", 4) + 4]
+        self.assertEqual(self.state.read_text(encoding="utf-8"), touched(fm) + body)
+
+    def test_old_knowledge_entry_is_a_plain_file(self):
+        r = self.run_desk("put", str(self.entry), "--file", self.scratch_file("새 본문\n"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.entry.read_text(encoding="utf-8"), "새 본문\n")
+        self.assertFalse((self.entry.parent / "index.md").exists())
 
     def test_unreadable_copy_frontmatter_is_ignored(self):
         bad = "---\ntitle: x\n  nested: y\n---\n새 본문\n"
@@ -159,38 +165,6 @@ class Put(DeskFixture):
         self.assertIn("status: on_hold", text)
         self.assertIn("새 본문", text)
 
-    def test_keeps_knowledge_keys_and_drops_ones_the_file_lacks(self):
-        copy = ENTRY.replace("status: valid", "status: stale\nstale_reason: 옛 사유").replace("본문", "새 본문")
-        r = self.run_desk("--project", "p", "kn", "verify", "K0001")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        verified = json.loads(r.stdout)["verified"]
-        r = self.run_desk("put", str(self.entry), "--file", self.scratch_file(copy))
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(json.loads(r.stdout)["kept"], {"status": "valid", "stale_reason": None, "verified": verified})
-        text = self.entry.read_text(encoding="utf-8")
-        self.assertIn("status: valid", text)
-        self.assertIn(f"verified: {verified}", text)
-        self.assertNotIn("옛 사유", text)
-        self.assertIn("새 본문", text)
-
-    def test_unchanged_keys_report_nothing(self):
-        r = self.run_desk("put", str(self.entry), "--file", self.scratch_file(ENTRY.replace("본문", "새 본문")))
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertNotIn("kept", json.loads(r.stdout))
-        self.assertNotIn("updated", self.entry.read_text(encoding="utf-8"))  # entries have no `updated` key
-
-    def test_entry_updated_kept_current_when_present(self):
-        with_updated = ENTRY.replace("status: valid", "status: valid\nupdated: 2026-01-01")
-        self.entry.write_text(with_updated, encoding="utf-8", newline="\n")
-        r = self.run_desk("put", str(self.entry), "--file", self.scratch_file("새 본문\n"))
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn(f"updated: {TODAY}", self.entry.read_text(encoding="utf-8"))
-        self.entry.write_text(with_updated, encoding="utf-8", newline="\n")
-        r = self.run_desk("--project", "p", "kn", "set", "K0001", "--title", "새 제목")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn(f"updated: {TODAY}", self.entry.read_text(encoding="utf-8"))
-
-
 class PutVerified(DeskFixture):
     def test_state(self):
         r = self.run_desk("put", str(self.state), "--verified", "--file", self.scratch_file("## 목표\n\n확인함\n"))
@@ -201,26 +175,11 @@ class PutVerified(DeskFixture):
         self.assertIn(f"verified: {verified}", text)
         self.assertIn(f"updated: {TODAY}", text)
 
-    def test_knowledge_like_kn_verify(self):
-        stale = ENTRY.replace("status: valid", "status: stale\nstale_reason: 코드 바뀜\nverified: 2026-01-01 00:00")
-        self.entry.write_text(stale, encoding="utf-8", newline="\n")
-        r = self.run_desk("put", str(self.entry), "--verified", "--file", self.scratch_file("고친 본문\n"))
-        self.assertEqual(r.returncode, 0, r.stderr)
-        verified = json.loads(r.stdout)["verified"]
-        text = self.entry.read_text(encoding="utf-8")
-        self.assertIn("status: valid", text)
-        self.assertIn(f"verified: {verified}", text)
-        self.assertNotIn("코드 바뀜", text)
-        self.assertIn("고친 본문", text)
-
-    def test_refused_for_other_files_and_inactive_entries(self):
-        r = self.run_desk("put", str(self.log), "--verified", "--file", self.scratch_file("x\n"))
-        self.assertEqual(r.returncode, 1)
-        self.assertIn("--verified", r.stderr)
-        self.entry.write_text(ENTRY.replace("status: valid", "status: retired"), encoding="utf-8", newline="\n")
-        r = self.run_desk("put", str(self.entry), "--verified", "--file", self.scratch_file("x\n"))
-        self.assertEqual(r.returncode, 1)
-        self.assertIn("retired", r.stderr)
+    def test_refused_for_other_files(self):
+        for target in (self.log, self.entry):
+            r = self.run_desk("put", str(target), "--verified", "--file", self.scratch_file("x\n"))
+            self.assertEqual(r.returncode, 1, target.name)
+            self.assertIn("--verified", r.stderr)
 
 
 class TaskUpdated(DeskFixture):
@@ -338,57 +297,6 @@ class SetTask(DeskFixture):
 
     def test_no_edit_alias(self):
         self.assertEqual(self.run_desk("--project", "p", "edit", "t1", "--title", "x").returncode, 2)
-        self.assertEqual(self.run_desk("--project", "p", "kn", "edit", "K0001", "--title", "x").returncode, 2)
-
-
-class KnSet(DeskFixture):
-    def test_edits_keys(self):
-        r = self.run_desk("--project", "p", "kn", "set", "K0001", "--title", "새 제목", "--paths", "a/**, b/*.py",
-                          "--tags", "x,y", "--kind", "finding", "--location", "repo:docs/a.md")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(json.loads(r.stdout)["changed"], ["kind", "location", "paths", "tags", "title"])
-        text = self.entry.read_text(encoding="utf-8")
-        for line in ("title: 새 제목", "paths: [a/**, b/*.py]", "tags: [x, y]", "kind: finding", "location: repo:docs/a.md"):
-            self.assertIn(line + "\n", text)
-        self.assertIn("본문", text)
-        self.assertIn("새 제목", (self.entry.parent / "index.md").read_text(encoding="utf-8"))
-
-    def test_list_keys_add_remove(self):
-        r = self.run_desk("--project", "p", "kn", "set", "K0001", "--add-path", "b/**", "--add-path", "src/**",
-                          "--add-tag", "x", "--add-source", "t1")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        out = json.loads(r.stdout)
-        self.assertEqual(out["changed"], ["paths", "sources", "tags"])
-        self.assertEqual((out["paths"], out["tags"], out["sources"]), (["src/**", "b/**"], ["x"], ["t1"]))
-        r = self.run_desk("--project", "p", "kn", "set", "K0001", "--remove-path", "src/**", "--remove-tag", "none")
-        self.assertEqual(json.loads(r.stdout)["changed"], ["paths"])
-        r = self.run_desk("--project", "p", "kn", "set", "K0001", "--sources", "a,b", "--remove-source", "a")
-        self.assertEqual(json.loads(r.stdout)["sources"], ["b"])
-        text = self.entry.read_text(encoding="utf-8")
-        for line in ("paths: [b/**]", "tags: [x]", "sources: [b]"):
-            self.assertIn(line + "\n", text)
-
-    def test_global_entry_has_no_paths(self):
-        gdir = self.root / "knowledge"
-        gdir.mkdir()
-        (gdir / "G0001-x.md").write_text(ENTRY.replace("K0001", "G0001").replace("paths: [src/**]", "paths: []"),
-                                        encoding="utf-8", newline="\n")
-        r = self.run_desk("--project", "p", "kn", "set", "G0001", "--add-path", "a/**")
-        self.assertEqual(r.returncode, 1)
-        self.assertIn("전역", r.stderr)
-        r = self.run_desk("--project", "p", "kn", "set", "G0001", "--add-tag", "x")
-        self.assertEqual(r.returncode, 0, r.stderr)
-
-    def test_refusals(self):
-        r = self.run_desk("--project", "p", "kn", "set", "K0001", "--status", "valid")
-        self.assertEqual(r.returncode, 2)
-        self.assertIn("kn verify", r.stderr)
-        r = self.run_desk("--project", "p", "kn", "set", "K0001", "--kind", "nope")
-        self.assertEqual(r.returncode, 2)
-        self.entry.write_text("---\nid: K0001\nstatus: deleted\n---\n", encoding="utf-8", newline="\n")
-        r = self.run_desk("--project", "p", "kn", "set", "K0001", "--title", "x")
-        self.assertEqual(r.returncode, 1)
-        self.assertIn("삭제", r.stderr)
 
 
 class DecisionHeadings(DeskFixture):

@@ -1,4 +1,4 @@
-# 세션 중 브랜치가 바뀌면 다음 프롬프트에서 새 위치의 후보를 알린다 (K0025)
+# 세션 중 브랜치가 바뀌면 다음 프롬프트에서 새 위치의 후보를 알린다
 
 === SessionStart startup (main)
 [additionalContext SessionStart]
@@ -8,7 +8,7 @@
 - <YYMMDD>-feature__login (로그인 기능) · in_progress · 브랜치 feature/login
 
 포커스는 사용자의 요청으로 정한다. 사용자의 요청이 이 중 하나를 분명히 가리키면 `adesk focus <id>` 로 포커스하고, 아니면 묻는다. 태스크와 무관한 세션이면 포커스하지 않고, 포커스 전에는 기록하지 않는다.
-태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다.
+태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬을 따른다.
 
 === UserPromptSubmit (같은 위치)
 (출력 없음)
@@ -19,7 +19,7 @@
 [agent-desk] 프로젝트 myapp · 브랜치 feature/login · 포커스 없음
 이 브랜치의 태스크: <YYMMDD>-feature__login (로그인 기능) · in_progress · 브랜치 feature/login
 포커스는 사용자의 요청으로 정한다. 사용자의 요청이 이 브랜치의 일이면 묻지 않고 `adesk focus <id>` 로 포커스하고, 다른 태스크를 가리키거나 애매하면 묻는다. 태스크와 무관한 세션이면 포커스하지 않고, 포커스 전에는 기록하지 않는다.
-태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다.
+태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬을 따른다.
 
 === UserPromptSubmit (다시, 같은 위치)
 (출력 없음)

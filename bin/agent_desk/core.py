@@ -43,7 +43,7 @@ BUSY_WAIT = 5.0  # seconds: a sync client or an indexer can hold a file for a fe
 
 def retry_busy(action) -> None:
     """Run action, retrying while Windows refuses it because another process (a sync client,
-    an indexer, a reader) has the file open (K0047). The wait starts at 10 ms and doubles up to
+    an indexer, a reader) has the file open. The wait starts at 10 ms and doubles up to
     200 ms: a short clash passes quickly, a long one is still waited out up to BUSY_WAIT."""
     import time
     deadline, delay = time.monotonic() + BUSY_WAIT, 0.01
@@ -138,7 +138,7 @@ def root_lock_name(root: Path) -> str:
 
 
 def root_lock(root: Path):
-    """Held by every CLI command that changes the data root, for the whole command (K0044)."""
+    """Held by every CLI command that changes the data root, for the whole command."""
     return file_lock(root_lock_name(root), timeout=60.0)
 
 

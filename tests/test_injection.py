@@ -28,7 +28,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 from pathlib import Path
 
@@ -40,8 +39,7 @@ UPDATE = os.environ.get("AGENT_DESK_UPDATE_SNAPSHOTS") == "1"
 # Fixture budget for one injection. The fixture records are small, so this catches the
 # injected wording itself growing (or a record being injected twice), not real record size.
 CONTEXT_MAX_CHARS = 4000
-KN_INJECT_LIMIT = 15
-TASK_LAST_LINE = "결정을 확정하거나 단계를 끝내면 바로 decisions.md·state.md·log.md에 기록한다."  # K0033
+TASK_LAST_LINE = "결정을 확정하거나 단계를 끝내면 바로 decisions.md·state.md·log.md에 기록한다."
 
 
 def child_env(base: Path) -> dict:
@@ -141,26 +139,13 @@ class Desk:
         n = len(re.findall(r"^## D\d+\.", re.sub(r"<!--.*?-->", "", text, flags=re.S), re.M)) + 1
         path.write_text(text.rstrip("\n") + f"\n\n## D{n}. {title}  (2026-01-01, 유효)\n{body}\n", encoding="utf-8")
 
-    def add_knowledge(self, n: int, title: str, kind: str, paths: list[str], status: str = "valid",
-                      location: str = "inline", stale_reason: str = "") -> None:
-        """Written directly (not `kn add`) so dates and ids are fixed."""
+    def add_old_knowledge(self, n: int, paths: list[str]) -> None:
+        """A knowledge entry as releases before 0.10 wrote it: left in the data root, no longer read."""
         kdir = self.project_dir / "knowledge"
         kdir.mkdir(exist_ok=True)
-        lines = ["---", f"id: K{n:04d}", f'title: "{title}"', f"kind: {kind}",
-                 f"paths: [{', '.join(paths)}]", "tags: []", "sources: []", f"location: {location}",
-                 f"status: {status}", "created: 2026-01-01", "verified: 2026-01-01 00:00"]
-        if stale_reason:
-            lines.append(f'stale_reason: "{stale_reason}"')
-        (kdir / f"K{n:04d}-entry.md").write_text("\n".join(lines + ["---", "- 본문", ""]), encoding="utf-8")
-
-    def set_doctor_age(self, days: float | None) -> None:
-        marker = self.project_dir / ".last-doctor"
-        if days is None:
-            marker.unlink(missing_ok=True)
-            return
-        marker.write_text("", encoding="utf-8")
-        t = time.time() - days * 86400
-        os.utime(marker, (t, t))
+        lines = ["---", f"id: K{n:04d}", 'title: "항목"', "kind: pitfall", f"paths: [{', '.join(paths)}]",
+                 "status: valid", "verified: 2026-01-01 00:00", "---", "- 본문", ""]
+        (kdir / f"K{n:04d}-entry.md").write_text("\n".join(lines), encoding="utf-8")
 
     def checkout(self, *args: str) -> None:
         self.git("checkout", "-q", *args)
@@ -277,15 +262,6 @@ class InjectionTest(unittest.TestCase):
         self.assertIn("agent-desk:desk 스킬", lines[-1])
         self.assertNotIn("--- state.md ---", lines)
 
-    def assert_knowledge_context(self, ctx: str, rel: str) -> list[str]:
-        lines = ctx.splitlines()
-        self.assertEqual(lines[0], f"[agent-desk knowledge] {rel} 관련 항목:")
-        self.assertTrue(lines[-1].startswith("항목 파일: "), lines[-1])
-        items = [l for l in lines[1:-1] if re.match(r"- K\d{4} ", l)]
-        self.assertLessEqual(len(items), KN_INJECT_LIMIT)
-        self.assertEqual(len(items), len(set(items)), "duplicate entries")
-        return [l.split()[1] for l in items]
-
     # --- layer 1: snapshot, or the difference from a base scene ------------------------------
 
     def assert_differs(self, base: str, ctx: str, added: list[str], removed: list[str] = ()) -> None:
@@ -332,8 +308,8 @@ class InjectionTest(unittest.TestCase):
         self.assertIsNone(self.call("SessionStart startup (미등록 저장소)", "session-start",
                                     {"source": "startup"}, cwd=other))
         self.assertIsNone(self.call("UserPromptSubmit (미등록 저장소)", "user-prompt-submit", {}, cwd=other))
-        self.assertIsNone(self.call("PostToolUse Read (미등록 저장소)", "post-tool-use",
-                                    {"tool_name": "Read", "tool_input": {"file_path": str(other / "a.py")}},
+        self.assertIsNone(self.call("PostToolUse Edit (미등록 저장소)", "post-tool-use",
+                                    {"tool_name": "Edit", "tool_input": {"file_path": str(other / "a.py")}},
                                     cwd=other))
         self.snapshot("unregistered_repo", "등록하지 않은 저장소에서는 아무것도 주입하지 않는다 (README 처음 쓰는 저장소)")
 
@@ -348,20 +324,18 @@ class InjectionTest(unittest.TestCase):
         self.assertIn("--- 열린 태스크 ---", ctx)
         self.assertIn("사용자의 요청이 이 중 하나를 분명히 가리키면 `adesk focus <id>` 로 포커스하고, 아니면 묻는다.", ctx)
         self.snapshot("no_task_lists_open_tasks",
-                      "브랜치에 연결된 태스크가 없으면 열린 태스크 전체를 후보로 보여 주고 요청으로 고르게 한다 (K0041)")
+                      "브랜치에 연결된 태스크가 없으면 열린 태스크 전체를 후보로 보여 주고 요청으로 고르게 한다")
 
     def test_branch_task_recommended(self):
         tid = self.login_task()
         self.desk.new("검색 개선", "--no-branch", "--slug", "search-improve", "--todo")
-        self.desk.add_knowledge(1, "세션 토큰 캐시는 설정을 다시 읽어도 초기화되지 않는다", "pitfall", ["src/auth/**"])
         ctx = self.call("SessionStart startup", "session-start", {"source": "startup"})
         self.assert_candidates(ctx)
         self.assertIn(f"이 브랜치의 태스크: {tid} (로그인 기능) · in_progress", ctx)
         self.assertIn("다른 열린 태스크 1건:", ctx)
         self.assertIn("사용자의 요청이 이 브랜치의 일이면 묻지 않고 `adesk focus <id>` 로 포커스하고", ctx)
-        self.assertIn("doctor를 한 번도 실행하지 않았다", ctx)
         self.snapshot("branch_task_recommended",
-                      "브랜치에 연결된 태스크는 기록을 넣지 않고 추천한다 (README 다음 날 이어서, 낡은 지식 점검 제안)")
+                      "브랜치에 연결된 태스크는 기록을 넣지 않고 추천한다 (README 다음 날 이어서)")
 
     def test_focus_then_compact_resume_clear(self):
         d = self.desk
@@ -375,7 +349,7 @@ class InjectionTest(unittest.TestCase):
         self.assertEqual(d.cli("where", env={"CLAUDE_CODE_SESSION_ID": "s1"})["focus"], tid)
         ctx = self.call("SessionStart compact", "session-start", {"source": "compact"})
         self.assert_task_context(ctx, tid)
-        self.assertIn("컨텍스트가 방금 압축되었다.", ctx)  # K0009
+        self.assertIn("컨텍스트가 방금 압축되었다.", ctx)
         resumed = self.call("SessionStart resume", "session-start", {"source": "resume"})
         self.assert_differs(ctx, resumed, added=[], removed=["컨텍스트가 방금 압축되었다."])
         self.assert_candidates(self.call("SessionStart clear (새 세션 ID)", "session-start",
@@ -454,7 +428,7 @@ class InjectionTest(unittest.TestCase):
         self.assertIn(f"--- 상위 태스크 {parent} state.md", ctx)
         self.assertIn("- D1. 1.0 기준  (2026-01-01, 유효)", ctx)
         self.assertIn("다른 열린 태스크 2건:", ctx)
-        self.snapshot("subtask_with_parent", "하위 태스크 세션에 상위 태스크 현황과 결정 목록을 함께 주입한다 (K0026)")
+        self.snapshot("subtask_with_parent", "하위 태스크 세션에 상위 태스크 현황과 결정 목록을 함께 주입한다")
 
     def test_parent_task_counts_children(self):
         d = self.desk
@@ -465,7 +439,7 @@ class InjectionTest(unittest.TestCase):
         d.new("로그인 기능", "--branch", "feature/login", "--parent", parent)
         ctx = self.call("SessionStart resume (하위 2건)", "session-start", {"source": "resume"})
         self.assert_task_context(ctx, parent)
-        self.assert_differs(base, ctx, added=["다른 열린 태스크 2건(하위 2건):"])  # K0041
+        self.assert_differs(base, ctx, added=["다른 열린 태스크 2건(하위 2건):"])
 
     def test_location_change_prompt(self):
         tid = self.login_task()
@@ -479,7 +453,7 @@ class InjectionTest(unittest.TestCase):
         self.assert_candidates(ctx.split("\n", 1)[1])
         self.assertIn(f"이 브랜치의 태스크: {tid} (로그인 기능)", ctx)
         self.assertIsNone(self.call("UserPromptSubmit (다시, 같은 위치)", "user-prompt-submit", {}))
-        self.snapshot("location_change_prompt", "세션 중 브랜치가 바뀌면 다음 프롬프트에서 새 위치의 후보를 알린다 (K0025)")
+        self.snapshot("location_change_prompt", "세션 중 브랜치가 바뀌면 다음 프롬프트에서 새 위치의 후보를 알린다")
 
     def test_location_change_worktree(self):
         d = self.desk
@@ -503,49 +477,17 @@ class InjectionTest(unittest.TestCase):
         self.assertIn("서브에이전트는 이 세션의 포커스를 바꾸지 않는다", ctx)
         self.assertIsNone(self.call("UserPromptSubmit (메인 위치는 그대로)", "user-prompt-submit", {}))
         self.snapshot("location_change_worktree", "worktree 진입·이탈 시 새 위치의 후보를 알린다. "
-                                                  "서브에이전트에게는 세션의 포커스를 바꾸지 말라고 알린다 (K0025, G0007, D2)")
+                                                  "서브에이전트에게는 세션의 포커스를 바꾸지 말라고 알린다 (D2)")
 
-    def test_knowledge_file_access(self):
+    def test_old_knowledge_is_ignored(self):
         d = self.desk
-        kinds = ["decision", "pitfall", "finding", "howto"]
-        for n in range(1, 18):  # 17 live entries on src/auth/**: more than the limit
-            d.add_knowledge(n, f"auth 항목 {n}", kinds[n % 4], ["src/auth/**"])
-        d.add_knowledge(18, "갱신 요청이 겹치면 토큰이 두 번 발급된다", "pitfall", ["src/auth/token.ts"],
-                        status="stale", stale_reason="갱신 코드가 바뀜")
-        d.add_knowledge(19, "토큰 갱신 설계", "decision", ["src/auth/token.ts"], location="repo:docs/token.md")
-        d.add_knowledge(20, "대체된 항목", "pitfall", ["src/auth/**"], status="superseded")
-        d.add_knowledge(21, "결제 웹훅 중복 처리", "pitfall", ["src/payments/**"])
-        src = d.repo / "src" / "auth"
-        read = lambda name, **kw: {"tool_name": "Read", "tool_input": {"file_path": str(src / name)}, **kw}
-
-        ids = self.assert_knowledge_context(self.call("PostToolUse Read src/auth/token.ts", "post-tool-use",
-                                                      read("token.ts")), "src/auth/token.ts")
-        self.assertEqual(len(ids), KN_INJECT_LIMIT)
-        kinds_of = {f"K{n:04d}": ("pitfall" if n == 18 else "decision" if n == 19 else kinds[n % 4])
-                    for n in range(1, 20)}
-        order = ["pitfall", "finding", "howto", "decision"]
-        ranks = [order.index(kinds_of[i]) for i in ids]
-        self.assertEqual(ranks, sorted(ranks), "pitfalls first")
-        self.assertNotIn("K0020", ids)  # superseded
-        self.assertNotIn("K0021", ids)  # other path
-        rest = self.assert_knowledge_context(self.call("PostToolUse Read src/auth/token.ts (다시)", "post-tool-use",
-                                                       read("token.ts")), "src/auth/token.ts")
-        self.assertEqual(len(set(ids) | set(rest)), 19)
-        self.assertIsNone(self.call("PostToolUse Read src/auth/session.ts (모두 보임)", "post-tool-use",
-                                    read("session.ts")))
-        sub = self.assert_knowledge_context(self.call("PostToolUse Read src/auth/session.ts (서브에이전트)",
-                                                      "post-tool-use", read("session.ts", agent_id="a1")),
-                                            "src/auth/session.ts")
-        self.assertEqual(len(sub), KN_INJECT_LIMIT)
-        self.assertIsNone(self.call("PostToolUse Edit README.md (매칭 없음)", "post-tool-use",
-                                    {"tool_name": "Edit", "tool_input": {"file_path": str(d.repo / "README.md")}}))
-        self.call("SessionStart compact (주입 이력 초기화)", "session-start", {"source": "compact"})
-        again = self.assert_knowledge_context(self.call("PostToolUse Read src/auth/session.ts (압축 뒤)",
-                                                        "post-tool-use", read("session.ts")), "src/auth/session.ts")
-        self.assertEqual(len(again), KN_INJECT_LIMIT)
-        self.snapshot("knowledge_file_access",
-                      "파일 접근 시 paths가 맞는 지식 제목을 함정부터 15건까지 한 번씩 주입한다 "
-                      "(README 함정을 발견하면 지식으로, K0036, K0039)")
+        d.new("문서 정리", "--no-branch", "--slug", "docs")
+        base = self.call("SessionStart startup", "session-start", {"source": "startup"})
+        d.add_old_knowledge(1, ["src/**"])
+        self.assertEqual(self.call("SessionStart startup (이전 버전의 지식 항목)", "session-start",
+                                   {"source": "startup"}), base)
+        self.assertIsNone(self.call("PostToolUse Edit src/a.py", "post-tool-use",
+                                    {"tool_name": "Edit", "tool_input": {"file_path": str(d.repo / "src" / "a.py")}}))
 
     def test_desk_file_edit(self):
         d = self.desk
@@ -571,19 +513,8 @@ class InjectionTest(unittest.TestCase):
         base = self.call("SessionStart startup", "session-start", {"source": "startup"})
         (d.root / "desk.toml").write_text("schema_version = 1\n", encoding="utf-8")
         ctx = self.call("SessionStart startup (스키마 1)", "session-start", {"source": "startup"})
-        self.assertIn("`adesk migrate`", ctx)  # K0042
+        self.assertIn("`adesk migrate`", ctx)
         self.assert_differs(base, ctx, added=[next(l for l in ctx.splitlines() if "`adesk migrate`" in l)])
-
-    def test_doctor_reminder(self):
-        d = self.desk
-        d.add_knowledge(1, "항목", "pitfall", ["src/**"])
-        d.set_doctor_age(1)
-        base = self.call("SessionStart startup (doctor 1일 전)", "session-start", {"source": "startup"})
-        self.assertNotIn("doctor를", base)
-        d.set_doctor_age(10)
-        ctx = self.call("SessionStart startup (doctor 10일 전)", "session-start", {"source": "startup"})
-        self.assertIn("doctor를 10일째 실행하지 않았다", ctx)
-        self.assert_differs(base, ctx, added=[next(l for l in ctx.splitlines() if "doctor를 10일째" in l)])
 
     def test_hook_failure(self):
         d = self.desk
@@ -602,8 +533,7 @@ class IsolationTest(unittest.TestCase):
         self.addCleanup(remove_tree, base)
         d = Desk(base)
         d.new("문서 정리", "--no-branch", "--slug", "docs")
-        d.add_knowledge(1, "항목", "pitfall", ["src/**"])
-        d.hook("post-tool-use", {"tool_name": "Read", "tool_input": {"file_path": str(d.repo / "src" / "a.py")}})
+        d.hook("session-start", {"source": "startup"})
         r = d.run([sys.executable, str(DESK_PY), "where"])
         where = json.loads(r.stdout)
         self.assertEqual(Path(where["root"]).resolve(), (base / "desk").resolve())

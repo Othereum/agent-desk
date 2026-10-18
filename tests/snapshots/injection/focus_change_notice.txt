@@ -9,7 +9,7 @@
 - <YYMMDD>-login (로그인 기능) · in_progress · 브랜치 없음
 
 포커스는 사용자의 요청으로 정한다. 사용자의 요청이 이 중 하나를 분명히 가리키면 `adesk focus <id>` 로 포커스하고, 아니면 묻는다. 태스크와 무관한 세션이면 포커스하지 않고, 포커스 전에는 기록하지 않는다.
-태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다.
+태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬을 따른다.
 
 === UserPromptSubmit (처음 정한 포커스)
 (출력 없음)

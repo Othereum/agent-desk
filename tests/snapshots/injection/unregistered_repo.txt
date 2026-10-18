@@ -6,5 +6,5 @@
 === UserPromptSubmit (미등록 저장소)
 (출력 없음)
 
-=== PostToolUse Read (미등록 저장소)
+=== PostToolUse Edit (미등록 저장소)
 (출력 없음)

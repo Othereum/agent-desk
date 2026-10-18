@@ -36,7 +36,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Read|Edit|Write|MultiEdit|NotebookEdit|EnterWorktree|ExitWorktree",
+        "matcher": "Edit|Write|MultiEdit|EnterWorktree|ExitWorktree",
         "hooks": [
           {
             "type": "command",

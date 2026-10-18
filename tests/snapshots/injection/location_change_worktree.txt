@@ -1,4 +1,4 @@
-# worktree 진입·이탈 시 새 위치의 후보를 알린다. 서브에이전트에게는 세션의 포커스를 바꾸지 말라고 알린다 (K0025, G0007, D2)
+# worktree 진입·이탈 시 새 위치의 후보를 알린다. 서브에이전트에게는 세션의 포커스를 바꾸지 말라고 알린다 (D2)
 
 === SessionStart startup (main)
 [additionalContext SessionStart]
@@ -8,7 +8,7 @@
 - <YYMMDD>-feature__login (로그인 기능) · in_progress · 브랜치 feature/login
 
 포커스는 사용자의 요청으로 정한다. 사용자의 요청이 이 중 하나를 분명히 가리키면 `adesk focus <id>` 로 포커스하고, 아니면 묻는다. 태스크와 무관한 세션이면 포커스하지 않고, 포커스 전에는 기록하지 않는다.
-태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다.
+태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬을 따른다.
 
 === PostToolUse EnterWorktree
 [additionalContext PostToolUse]
@@ -16,7 +16,7 @@
 [agent-desk] 프로젝트 myapp · 브랜치 feature/login · 포커스 없음
 이 브랜치의 태스크: <YYMMDD>-feature__login (로그인 기능) · in_progress · 브랜치 feature/login
 포커스는 사용자의 요청으로 정한다. 사용자의 요청이 이 브랜치의 일이면 묻지 않고 `adesk focus <id>` 로 포커스하고, 다른 태스크를 가리키거나 애매하면 묻는다. 태스크와 무관한 세션이면 포커스하지 않고, 포커스 전에는 기록하지 않는다.
-태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다.
+태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬을 따른다.
 
 === PostToolUse ExitWorktree
 [additionalContext PostToolUse]
@@ -27,7 +27,7 @@
 - <YYMMDD>-feature__login (로그인 기능) · in_progress · 브랜치 feature/login
 
 포커스는 사용자의 요청으로 정한다. 사용자의 요청이 이 중 하나를 분명히 가리키면 `adesk focus <id>` 로 포커스하고, 아니면 묻는다. 태스크와 무관한 세션이면 포커스하지 않고, 포커스 전에는 기록하지 않는다.
-태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다.
+태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬을 따른다.
 
 === PostToolUse EnterWorktree (서브에이전트)
 [additionalContext PostToolUse]
@@ -35,7 +35,7 @@
 [agent-desk] 프로젝트 myapp · 브랜치 feature/login · 포커스 없음
 이 브랜치의 태스크: <YYMMDD>-feature__login (로그인 기능) · in_progress · 브랜치 feature/login
 서브에이전트는 이 세션의 포커스를 바꾸지 않는다(`adesk focus` 금지). 기록은 지시받은 태스크 ID로 한다.
-태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬, knowledge 규칙은 agent-desk:kn 스킬을 따른다.
+태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬을 따른다.
 
 === UserPromptSubmit (메인 위치는 그대로)
 (출력 없음)
