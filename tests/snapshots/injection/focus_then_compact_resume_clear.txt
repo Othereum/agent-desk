@@ -1,11 +1,11 @@
-# 요청으로 정한 포커스 태스크의 기록은 focus가 출력하고, 압축·재개 뒤에도 그 세션에 다시 주입한다. /clear는 새 세션이라 후보부터 다시 고른다 (D4)
+# 요청으로 정한 포커스 태스크의 기록은 focus가 출력하고, 압축·재개 뒤에도 그 세션에 다시 주입한다. /clear는 새 세션이라 후보부터 다시 고른다
 
 === SessionStart startup
 [additionalContext SessionStart]
 [agent-desk] 프로젝트 myapp · 브랜치 feature/login · 포커스 없음
 이 브랜치의 태스크: <YYMMDD>-feature__login (로그인 기능) · in_progress · 브랜치 feature/login
 포커스는 사용자의 요청으로 정한다. 사용자의 요청이 이 브랜치의 일이면 묻지 않고 `adesk focus <id>` 로 포커스하고, 다른 태스크를 가리키거나 애매하면 묻는다. 태스크와 무관한 세션이면 포커스하지 않고, 포커스 전에는 기록하지 않는다.
-태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬을 따른다.
+태스크 생성·기록·과거 결정 조회는 agent-desk:desk 스킬을 따른다.
 
 === adesk focus <YYMMDD>-feature__login
 [agent-desk] 프로젝트 myapp · 브랜치 feature/login · 포커스 <YYMMDD>-feature__login (in_progress)
@@ -109,4 +109,4 @@ verified: <DATE> <TIME>
 [agent-desk] 프로젝트 myapp · 브랜치 feature/login · 포커스 없음
 이 브랜치의 태스크: <YYMMDD>-feature__login (로그인 기능) · in_progress · 브랜치 feature/login
 포커스는 사용자의 요청으로 정한다. 사용자의 요청이 이 브랜치의 일이면 묻지 않고 `adesk focus <id>` 로 포커스하고, 다른 태스크를 가리키거나 애매하면 묻는다. 태스크와 무관한 세션이면 포커스하지 않고, 포커스 전에는 기록하지 않는다.
-태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬을 따른다.
+태스크 생성·기록·과거 결정 조회는 agent-desk:desk 스킬을 따른다.

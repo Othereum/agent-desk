@@ -356,7 +356,7 @@ class InjectionTest(unittest.TestCase):
                                          {"source": "clear", "session_id": "s2"}))
         self.snapshot("focus_then_compact_resume_clear",
                       "요청으로 정한 포커스 태스크의 기록은 focus가 출력하고, 압축·재개 뒤에도 그 세션에 다시 주입한다. "
-                      "/clear는 새 세션이라 후보부터 다시 고른다 (D4)")
+                      "/clear는 새 세션이라 후보부터 다시 고른다")
 
     def test_focus_todo_starts_it(self):
         d = self.desk
@@ -396,7 +396,7 @@ class InjectionTest(unittest.TestCase):
         self.assert_task_context(ctx, docs)
         self.assertIn(f"이 브랜치의 태스크는 {login}(로그인 기능)로, 포커스와 다르다.", ctx)
         self.snapshot("focus_differs_from_branch",
-                      "포커스와 브랜치의 태스크가 다르면 옮길 방법을 알린다 (D4)")
+                      "포커스와 브랜치의 태스크가 다르면 옮길 방법을 알린다")
 
     def test_focus_change_notice(self):
         d = self.desk
@@ -412,7 +412,7 @@ class InjectionTest(unittest.TestCase):
         d.session_cli("focus", "--clear")
         ctx = self.call("UserPromptSubmit (해제)", "user-prompt-submit", {})
         self.assertTrue(ctx.startswith(f"[agent-desk] 이 세션의 포커스가 바뀌었다: {b} → 없음."), ctx)
-        self.snapshot("focus_change_notice", "이 세션의 포커스가 바뀌면 다음 프롬프트에서 알린다 (서브에이전트가 바꾼 경우 대비, D3)")
+        self.snapshot("focus_change_notice", "이 세션의 포커스가 바뀌면 다음 프롬프트에서 알린다 (서브에이전트가 바꾼 경우 대비)")
 
     def test_subtask_with_parent(self):
         d = self.desk
@@ -477,7 +477,7 @@ class InjectionTest(unittest.TestCase):
         self.assertIn("서브에이전트는 이 세션의 포커스를 바꾸지 않는다", ctx)
         self.assertIsNone(self.call("UserPromptSubmit (메인 위치는 그대로)", "user-prompt-submit", {}))
         self.snapshot("location_change_worktree", "worktree 진입·이탈 시 새 위치의 후보를 알린다. "
-                                                  "서브에이전트에게는 세션의 포커스를 바꾸지 말라고 알린다 (D2)")
+                                                  "서브에이전트에게는 메인 세션의 포커스를 덮어쓰지 않도록 포커스를 바꾸지 말라고 알린다")
 
     def test_old_knowledge_is_ignored(self):
         d = self.desk
@@ -505,7 +505,7 @@ class InjectionTest(unittest.TestCase):
         ctx = self.call("PostToolUse Edit state.md (frontmatter 깨짐)", "post-tool-use", edit)
         self.assertIn("frontmatter를 읽을 수 없다", ctx)
         self.snapshot("desk_file_edit", "데이터 폴더 파일의 Edit/Write를 막고 put·append를 안내한다. "
-                                        "기록 파일의 frontmatter가 깨졌으면 알린다 (desk-rewind D1)")
+                                        "기록 파일의 frontmatter가 깨졌으면 알린다")
 
     def test_old_schema(self):
         d = self.desk

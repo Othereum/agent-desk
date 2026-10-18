@@ -1,4 +1,4 @@
-# 포커스와 브랜치의 태스크가 다르면 옮길 방법을 알린다 (D4)
+# 포커스와 브랜치의 태스크가 다르면 옮길 방법을 알린다
 
 === SessionStart startup (main)
 [additionalContext SessionStart]
@@ -9,7 +9,7 @@
 - <YYMMDD>-feature__login (로그인 기능) · in_progress · 브랜치 feature/login
 
 포커스는 사용자의 요청으로 정한다. 사용자의 요청이 이 중 하나를 분명히 가리키면 `adesk focus <id>` 로 포커스하고, 아니면 묻는다. 태스크와 무관한 세션이면 포커스하지 않고, 포커스 전에는 기록하지 않는다.
-태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬을 따른다.
+태스크 생성·기록·과거 결정 조회는 agent-desk:desk 스킬을 따른다.
 
 === UserPromptSubmit (처음 정한 포커스는 알리지 않음)
 (출력 없음)
@@ -20,7 +20,7 @@
 [agent-desk] 프로젝트 myapp · 브랜치 feature/login · 포커스 <YYMMDD>-docs (문서 정리)
 이 브랜치의 태스크: <YYMMDD>-feature__login (로그인 기능) · in_progress · 브랜치 feature/login
 사용자의 일이 이 브랜치의 태스크로 바뀌었으면 `adesk focus <YYMMDD>-feature__login` 로 포커스를 옮길 것.
-태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬을 따른다.
+태스크 생성·기록·과거 결정 조회는 agent-desk:desk 스킬을 따른다.
 
 === SessionStart resume (feature/login)
 [additionalContext SessionStart]

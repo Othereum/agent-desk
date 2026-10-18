@@ -1,4 +1,4 @@
-# 데이터 폴더 파일의 Edit/Write를 막고 put·append를 안내한다. 기록 파일의 frontmatter가 깨졌으면 알린다 (desk-rewind D1)
+# 데이터 폴더 파일의 Edit/Write를 막고 put·append를 안내한다. 기록 파일의 frontmatter가 깨졌으면 알린다
 
 === PreToolUse Edit state.md (차단)
 [deny PreToolUse]

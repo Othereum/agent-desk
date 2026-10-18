@@ -26,7 +26,7 @@ def decision_titles(task: Task) -> list[str]:
     return [m.group(1) for m in DECISION_LINE.finditer(strip_comments(read_text(path)))]
 
 
-RULES_LINE = "태스크 생성 기준과 기록 규칙은 agent-desk:desk 스킬을 따른다."
+RULES_LINE = "태스크 생성·기록·과거 결정 조회는 agent-desk:desk 스킬을 따른다."
 
 
 def session_start_context(payload: dict, location_change: bool = False) -> str | None:
