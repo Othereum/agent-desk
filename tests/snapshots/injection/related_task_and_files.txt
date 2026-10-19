@@ -1,6 +1,6 @@
-# 연관 태스크는 ID만, 첨부파일은 이름만 주입하고, 연관 태스크는 show로 포커스를 옮기지 않고 읽는다
+# 첨부파일은 이름만 주입하고, 다른 태스크는 show로 포커스를 옮기지 않고 읽는다
 
-=== SessionStart resume (연관 태스크·첨부파일)
+=== SessionStart resume (첨부파일)
 [additionalContext SessionStart]
 [agent-desk] 프로젝트 myapp · 브랜치 feature/login · 포커스 <YYMMDD>-login (in_progress)
 태스크 폴더: <TMP>/desk/projects/myapp/tasks/<YYMMDD>-login
@@ -12,10 +12,7 @@ title: 로그인 기능
 status: in_progress
 project: myapp
 branches: [feature/login]
-links: []
-design_doc:
 parent:
-related: [<YYMMDD>-login-draft]
 created: <DATE>
 updated: <DATE>
 verified: <DATE> <TIME>
@@ -29,8 +26,6 @@ verified: <DATE> <TIME>
 
 --- 결정 목록 (본문은 decisions.md) ---
 - D1. 세션 캐시는 Redis에 둔다  (2026-01-01, 유효)
-
-연관 태스크: <YYMMDD>-login-draft (필요할 때 `adesk show <id>` 로 읽을 것)
 
 첨부파일(files/): api-notes.md
 
@@ -47,10 +42,7 @@ title: 로그인 초안
 status: done
 project: myapp
 branches: []
-links: []
-design_doc:
 parent:
-related: []
 created: <DATE>
 updated: <DATE>
 verified: <DATE> <TIME>

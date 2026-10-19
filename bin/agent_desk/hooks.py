@@ -16,7 +16,7 @@ from .frontmatter import parse_frontmatter
 from .gitinfo import is_under, native_path, normalize_path, repo_info
 from .model import (
     DECISION_LINE, Project, Task, attachments, get_session_task, get_task, head_branch, load_tasks,
-    match_project, safe_name, session_dir, session_tasks, strip_comments, stray_files, task_list_field, tasks_on_branch,
+    match_project, safe_name, session_dir, session_tasks, strip_comments, stray_files, tasks_on_branch,
 )
 
 
@@ -93,10 +93,8 @@ def task_context(root: Path, project: Project, task: Task, branch: str | None, c
     """The task's records: what SessionStart injects for the session's focus and `adesk focus`
     prints (chosen: the session already has the shared lines, and the user chose it)."""
     head, common = context_head(root, project, branch)
-    design_doc = task.meta.get("design_doc")
     parts = [f"{head} · 포커스 {task.id} ({task.status})",
-             f"태스크 폴더: {task.dir.as_posix()}"] + ([f"설계 문서: {design_doc}"] if design_doc else []) + (
-             [] if chosen else common)
+             f"태스크 폴더: {task.dir.as_posix()}"] + ([] if chosen else common)
     others = [t for t in load_tasks(project) if t.status in OPEN_STATUSES and t.id != task.id]
     if others:
         children = sum(1 for t in others if t.meta.get("parent") == task.id)
@@ -153,9 +151,6 @@ def task_records(project: Project, task: Task, focused: bool = False) -> list[st
     parts = ["", "--- state.md ---", read_text(task.state_path).rstrip(),
              "", "--- 결정 목록 (본문은 decisions.md) ---"] + ([f"- {t}" for t in titles] or ["(없음)"])
     parts += parent_context(project, task, focused)
-    related = task_list_field(task, "related")
-    if related:
-        parts += ["", f"연관 태스크: {', '.join(related)} (필요할 때 `adesk show <id>` 로 읽을 것)"]
     files = attachments(task)
     if files:
         parts += ["", f"첨부파일({FILES_DIR}/): {', '.join(p.name for p in files)}"]

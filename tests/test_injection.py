@@ -456,14 +456,12 @@ class InjectionTest(unittest.TestCase):
         d.add_decision(old, "세션 방식으로 간다")
         d.cli("close", old, "done")
         tid = self.login_task()
-        d.cli("relate", tid, "--add", old)
         attachment = d.base / "api-notes.md"
         attachment.write_text("- 메모\n", encoding="utf-8")
         d.cli("files", tid, "add", str(attachment))
         d.focus(tid)
-        ctx = self.call("SessionStart resume (연관 태스크·첨부파일)", "session-start", {"source": "resume"})
+        ctx = self.call("SessionStart resume (첨부파일)", "session-start", {"source": "resume"})
         self.assert_task_context(ctx, tid)
-        self.assertIn(f"연관 태스크: {old} (필요할 때 `adesk show <id>` 로 읽을 것)", ctx)
         self.assertIn("첨부파일(files/): api-notes.md", ctx)
         shown = d.session_cli("show", old).stdout
         self.assertIn("- D1. 세션 방식으로 간다  (2026-01-01, 유효)", shown)
@@ -471,7 +469,7 @@ class InjectionTest(unittest.TestCase):
         self.assertEqual(d.cli("where", env={"CLAUDE_CODE_SESSION_ID": "s1"})["focus"], tid)
         self.calls.append(d.normalize(f"=== adesk show {old}\n{shown.rstrip()}"))
         self.snapshot("related_task_and_files",
-                      "연관 태스크는 ID만, 첨부파일은 이름만 주입하고, 연관 태스크는 show로 포커스를 옮기지 않고 읽는다")
+                      "첨부파일은 이름만 주입하고, 다른 태스크는 show로 포커스를 옮기지 않고 읽는다")
 
     def test_parent_task_counts_children(self):
         d = self.desk

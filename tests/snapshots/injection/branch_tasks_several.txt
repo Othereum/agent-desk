@@ -25,10 +25,7 @@ title: 로그인 오류 수정
 status: in_progress
 project: myapp
 branches: [feature/login]
-links: []
-design_doc:
 parent:
-related: []
 created: <DATE>
 updated: <DATE>
 verified: <DATE> <TIME>

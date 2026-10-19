@@ -78,10 +78,6 @@ class Show(unittest.TestCase):
         self.ok("delete", self.tid)
         self.assertIn("(done, 휴지통)", self.show(self.tid))
 
-    def test_related_tasks_point_to_show(self):
-        other = self.ok("new", "--title", "옆", "--slug", "side", "--related", self.tid)["task"]
-        self.assertIn(f"연관 태스크: {self.tid} (필요할 때 `adesk show <id>` 로 읽을 것)", self.show(other))
-
     def test_unknown_task(self):
         code, _, e = self.run_cli("show", "nope")
         self.assertEqual(code, 1)

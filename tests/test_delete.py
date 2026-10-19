@@ -165,8 +165,8 @@ class Delete(unittest.TestCase):
         tid, other = self.new("a"), self.new("b")
         self.ok("delete", tid)
         for argv in (["close", tid, "done"], ["reopen", tid], ["status", tid, "on_hold"],
-                     ["link", tid, "--branch", "x"], ["relate", tid, "--add", other],
-                     ["relate", other, "--add", tid], ["focus", tid]):
+                     ["link", tid, "--branch", "x"], ["set", tid, "--title", "x"],
+                     ["set", other, "--parent", tid], ["focus", tid]):
             err = self.fail_with(*argv)
             self.assertIn("휴지통", err, argv)
             self.assertIn(f"restore {tid}", err, argv)

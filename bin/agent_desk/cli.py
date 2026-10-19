@@ -99,13 +99,12 @@ def cmd_new(args) -> None:
     if branch:
         check_branch_linkable(project, branch)
     parent = resolve_parent(project, args.parent) if args.parent else None
-    related = [get_task(project, r).id for r in split_csv(args.related)]
     task_id = build_id(project, args.slug)
     tdir = project.dir / "tasks" / task_id
     values = {
         "id": task_id, "title": format_scalar(args.title), "project": project.key,
         "branches": format_value([branch] if branch else []),
-        "parent": parent.id if parent else "", "related": format_value(related),
+        "parent": parent.id if parent else "",
         "status": "todo",
         "date": today(), "datetime": now_minute(),
     }
@@ -113,7 +112,7 @@ def cmd_new(args) -> None:
         write_text(tdir / name, render_template(project.lang, name, values))
     write_index(project)
     out({"task": task_id, "dir": str(tdir), "branch": branch,
-         "parent": parent.id if parent else None, "related": related})
+         "parent": parent.id if parent else None})
 
 
 def cmd_focus(args) -> None:
@@ -149,47 +148,9 @@ def cmd_show(args) -> None:
     task = next((t for t in load_tasks(project, include_archive=True) if t.id.casefold() == args.id.casefold()),
                 None) or find_trashed(project, args.id) or get_task(project, args.id)  # get_task: not found at all
     where = "휴지통" if task.trashed else "아카이브" if task.archived else "열린 태스크"
-    design_doc = task.meta.get("design_doc")
     parts = [f"[agent-desk] 프로젝트 {project.key} · 태스크 {task.id} ({task.status}, {where}) · 읽기 전용(포커스는 바뀌지 않음)",
-             f"태스크 폴더: {task.dir.as_posix()}"] + ([f"설계 문서: {design_doc}"] if design_doc else [])
+             f"태스크 폴더: {task.dir.as_posix()}"]
     print("\n".join(parts + task_records(project, task)))
-
-
-def cmd_relate(args) -> None:
-    root = ensure_root()
-    project, _ = current_project(root, Path(args.cwd), args.project)
-    task = get_task(project, args.id)
-    updates, logs = {}, []
-    if args.parent:
-        if children_of(project, task.id):
-            raise DeskError(f"{task.id} 에 하위 태스크가 있어 상위 태스크를 지정할 수 없습니다(한 단계만 허용)")
-        parent = resolve_parent(project, args.parent, task.id)
-        updates["parent"] = parent.id
-        logs.append(f"상위 태스크 지정: {parent.id}")
-    elif args.no_parent and task.meta.get("parent"):
-        updates["parent"] = ""
-        logs.append(f"상위 태스크 해제: {task.meta['parent']}")
-    related = list(task_list_field(task, "related"))  # a copy: compared with the stored list below
-    for r in split_csv(args.add):
-        rid = get_task(project, r).id
-        if rid.casefold() == task.id.casefold():
-            raise DeskError("자기 자신을 연관 태스크로 지정할 수 없습니다")
-        if rid.casefold() not in (x.casefold() for x in related):
-            related.append(rid)
-            logs.append(f"연관 태스크 추가: {rid}")
-    for r in split_csv(args.remove):
-        kept = [x for x in related if x.casefold() != r.casefold()]
-        if len(kept) != len(related):
-            related = kept
-            logs.append(f"연관 태스크 제거: {r}")
-    if related != task_list_field(task, "related"):
-        updates["related"] = related
-    if updates:
-        set_meta(task, updates)
-        append_log(task, logs)
-        write_index(project)
-    out({"task": task.id, "parent": task.meta.get("parent") or None,
-         "related": task_list_field(task, "related"), "changed": bool(updates)})
 
 
 def cmd_link(args) -> None:
@@ -347,7 +308,43 @@ def migrate_task_statuses(root: Path, dry_run: bool) -> list[dict]:
     return changed
 
 
-MIGRATIONS = {1: migrate_task_statuses}  # from version N to N + 1
+LINKS_HEADING = "## 링크"
+
+
+def add_link_items(text: str, items: list[str]) -> str:
+    """Adds items to the end of the `## 링크` section of a state.md, appending the section if missing."""
+    lines = text.rstrip("\n").split("\n")
+    if LINKS_HEADING not in lines:
+        return "\n".join(lines + ["", LINKS_HEADING, ""] + items) + "\n"
+    start = lines.index(LINKS_HEADING)
+    end = next((j for j in range(start + 1, len(lines)) if lines[j].startswith("## ")), len(lines))
+    while end > start + 1 and not lines[end - 1].strip():
+        end -= 1
+    if end == start + 1:
+        items = [""] + items
+    return "\n".join(lines[:end] + items + lines[end:]) + "\n"
+
+
+def migrate_link_fields(root: Path, dry_run: bool) -> list[dict]:
+    """Schema 2 → 3: `links`, `design_doc` and `related` move from the frontmatter to the `## 링크` section of the body."""
+    fields = ("links", "design_doc", "related")
+    changed = []
+    for p in load_projects(root):
+        for t in load_tasks(p, include_archive=True) + load_trash(p):
+            if not any(f in t.meta for f in fields):
+                continue
+            items = (([f"- 설계 문서: {t.meta['design_doc']}"] if t.meta.get("design_doc") else [])
+                     + [f"- {url}" for url in task_list_field(t, "links")]
+                     + [f"- 연관 태스크: {rid}" for rid in task_list_field(t, "related")])
+            if items:
+                changed.append({"project": p.key, "task": t.id, "moved": items})
+            if not dry_run:
+                text = update_frontmatter(read_text(t.state_path), dict.fromkeys(fields))
+                write_text(t.state_path, add_link_items(text, items) if items else text)
+    return changed
+
+
+MIGRATIONS = {1: migrate_task_statuses, 2: migrate_link_fields}  # from version N to N + 1
 
 
 def cmd_migrate(args) -> None:
@@ -513,7 +510,7 @@ def refresh_indexes(root: Path, path: Path) -> None:
         write_index(get_project(root, rel[1]))
 
 
-KEPT_NOTE = ("frontmatter는 현재 값을 유지했습니다. 바꾸려면 `adesk set`(제목·설계 문서·링크), `status`·`link`·`relate` 를 쓰세요")
+KEPT_NOTE = ("frontmatter는 현재 값을 유지했습니다. 바꾸려면 `adesk set`(제목·상위 태스크), `status`·`link` 를 쓰세요")
 
 
 def write_desk_file(args, append: bool) -> None:
@@ -577,26 +574,22 @@ def cmd_set(args) -> None:
         if args.title != task.meta.get("title", ""):
             updates["title"] = args.title
             logs.append(f"제목 변경: {task.meta.get('title', '')} → {args.title}")
-    if args.design_doc is not None and args.design_doc != (task.meta.get("design_doc") or ""):
-        updates["design_doc"] = args.design_doc
-        logs.append(f"설계 문서 지정: {args.design_doc}" if args.design_doc else "설계 문서 해제")
-    links = list(task_list_field(task, "links"))  # a copy: compared with the stored list below
-    for url in args.add_link or []:
-        if url not in links:
-            links.append(url)
-            logs.append(f"링크 추가: {url}")
-    for url in args.remove_link or []:
-        if url in links:
-            links.remove(url)
-            logs.append(f"링크 제거: {url}")
-    if links != task_list_field(task, "links"):
-        updates["links"] = links
+    if args.parent:
+        if children_of(project, task.id):
+            raise DeskError(f"{task.id} 에 하위 태스크가 있어 상위 태스크를 지정할 수 없습니다(한 단계만 허용)")
+        parent = resolve_parent(project, args.parent, task.id)
+        if parent.id != task.meta.get("parent"):
+            updates["parent"] = parent.id
+            logs.append(f"상위 태스크 지정: {parent.id}")
+    elif (args.no_parent or args.parent == "") and task.meta.get("parent"):
+        updates["parent"] = ""
+        logs.append(f"상위 태스크 해제: {task.meta['parent']}")
     if updates:
         set_meta(task, updates)
         append_log(task, logs)
         write_index(project)
-    out({"task": task.id, "title": task.meta.get("title", ""), "design_doc": task.meta.get("design_doc") or None,
-         "links": task_list_field(task, "links"), "changed": bool(updates)})
+    out({"task": task.id, "title": task.meta.get("title", ""), "parent": task.meta.get("parent") or None,
+         "changed": bool(updates)})
 
 
 FILE_REMOVE_ACTIONS = ("rm", "remove", "delete")
@@ -737,7 +730,6 @@ def run(argv: list[str]) -> int:
     p.add_argument("--slug", required=True, help="ID 슬러그 (ID는 <yymmdd>-<slug>)")
     p.add_argument("--branch", help="이 태스크의 작업을 할 브랜치에 연결 (ID에는 영향 없음)")
     p.add_argument("--parent", help="상위 태스크 ID (한 단계만 허용)")
-    p.add_argument("--related", help="연관 태스크 ID (쉼표 구분)")
 
     p = sub.add_parser("focus", help="이 세션의 포커스(작업할 태스크)를 정하고 그 기록을 텍스트로 출력 (todo면 진행 중으로)")
     p.add_argument("id", nargs="?")
@@ -745,14 +737,6 @@ def run(argv: list[str]) -> int:
 
     p = sub.add_parser("show", help="태스크 기록을 텍스트로 출력 (포커스·상태를 바꾸지 않음, 종료·휴지통 태스크 포함)")
     p.add_argument("id")
-
-    p = sub.add_parser("relate", help="태스크의 상위·연관 관계 변경")
-    p.add_argument("id")
-    g = p.add_mutually_exclusive_group()
-    g.add_argument("--parent", help="상위 태스크 지정")
-    g.add_argument("--no-parent", action="store_true", help="상위 태스크 해제")
-    p.add_argument("--add", help="연관 태스크 추가 (쉼표 구분)")
-    p.add_argument("--remove", help="연관 태스크 제거 (쉼표 구분)")
 
     p = sub.add_parser("link", help="태스크에 브랜치 추가 연결")
     p.add_argument("id")
@@ -788,16 +772,15 @@ def run(argv: list[str]) -> int:
 
     sub.add_parser("index", help="태스크 index.md 재생성")
 
-    p = sub.add_parser("set", help="태스크의 제목·설계 문서·링크 변경",
-                       description="상태는 status·close, 브랜치는 link, 상위·연관 태스크는 relate 로 바꾼다.")
+    p = sub.add_parser("set", help="태스크의 제목·상위 태스크 변경",
+                       description="상태는 status·close, 브랜치는 link 로 바꾼다.")
     p.add_argument("id")
     p.add_argument("--title", help="제목 (오타 수정용. 일의 범위가 바뀌면 새 태스크)")
-    p.add_argument("--design-doc", help="설계 문서 URL (빈 값이면 해제)")
-    p.add_argument("--add-link", action="append", metavar="URL", help="링크 추가 (반복 가능)")
-    p.add_argument("--remove-link", action="append", metavar="URL", help="링크 제거 (반복 가능)")
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--parent", help="상위 태스크 지정·변경 (한 단계만 허용, 빈 값이면 해제)")
+    g.add_argument("--no-parent", action="store_true", help="상위 태스크 해제")
     for opts, hint in ((("--status",), "`adesk status <id> <상태>`, 종료는 `adesk close`"),
-                       (("--branch", "--branches"), "`adesk link <id> --branch <브랜치>`"),
-                       (("--parent", "--related"), "`adesk relate <id> --parent/--add/--remove`")):
+                       (("--branch", "--branches"), "`adesk link <id> --branch <브랜치>`")):
         p.add_argument(*opts, nargs="?", action=refuse_option(hint), help=argparse.SUPPRESS)
 
     p = sub.add_parser("files", help="태스크 첨부파일(files/) 목록·추가·삭제",
@@ -832,10 +815,12 @@ def run(argv: list[str]) -> int:
                     and (i == 0 or argv[i - 1] not in ("--cwd", "--project"))), None)
     if command in ("open", "use", "switch"):  # guesses for focus
         argv = [*argv[:argv.index(command)], "focus", *argv[argv.index(command) + 1:]]
+    if command == "relate":  # removed in 0.12: the parent is set by `set`
+        ap.exit(2, "오류: relate 는 없습니다. 상위 태스크는 `adesk set <id> --parent <P>`·`--no-parent` 로 바꾸세요\n")
     args = ap.parse_args(argv)
     handlers = {
         "where": cmd_where, "project-init": cmd_project_init, "new": cmd_new, "set": cmd_set,
-        "link": cmd_link, "unlink": cmd_unlink, "relate": cmd_relate, "focus": cmd_focus, "show": cmd_show, "status": cmd_status, "migrate": cmd_migrate, "close": cmd_close, "reopen": cmd_reopen,
+        "link": cmd_link, "unlink": cmd_unlink, "focus": cmd_focus, "show": cmd_show, "status": cmd_status, "migrate": cmd_migrate, "close": cmd_close, "reopen": cmd_reopen,
         "delete": cmd_delete, "restore": cmd_restore, "list": cmd_list, "index": cmd_index, "files": cmd_files,
         "put": lambda a: write_desk_file(a, append=False), "append": lambda a: write_desk_file(a, append=True), "hook": lambda a: cmd_hook(a.event), "doctor": cmd_doctor,
     }

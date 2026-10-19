@@ -125,19 +125,21 @@ class DeskRepo(unittest.TestCase):
 class ParallelCommands(DeskRepo):
     def test_different_commands_on_one_task_keep_every_change(self):
         a = self.new_task("a")
-        others = [self.new_task(f"b{i}") for i in range(4)]
-        procs = [self.popen("relate", a, "--add", b) for b in others]
+        log_path = self.root / "projects" / "p" / "tasks" / a / "log.md"
+        notes = []
+        for i in range(4):
+            notes.append(self.repo.parent / f"note{i}.md")
+            notes[-1].write_text(f"\n## 2026-01-01 00:0{i}\n- 메모 {i}\n", encoding="utf-8")
+        procs = [self.popen("append", str(log_path), "--file", str(n)) for n in notes]
         procs += [self.popen("link", a, "--branch", f"br{i}") for i in range(4)]
         procs += [self.popen("new", "--title", f"c{i}", "--slug", f"c{i}") for i in range(2)]
         self.wait_ok(procs)
         task = json.loads(self.run_desk("list").stdout)[0]
         self.assertEqual(task["id"], a)
         self.assertEqual(sorted(task["branches"]), [f"br{i}" for i in range(4)])
-        state = (self.root / "projects" / "p" / "tasks" / a / "state.md").read_text(encoding="utf-8")
-        for b in others:
-            self.assertIn(b, state.split("related:")[1].splitlines()[0])
-        log = (self.root / "projects" / "p" / "tasks" / a / "log.md").read_text(encoding="utf-8")
-        self.assertEqual(log.count("연관 태스크 추가"), 4)
+        log = log_path.read_text(encoding="utf-8")
+        for i in range(4):
+            self.assertIn(f"- 메모 {i}", log)
         self.assertEqual(log.count("브랜치 연결"), 4)
 
 

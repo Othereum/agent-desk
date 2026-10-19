@@ -197,7 +197,7 @@ def update_frontmatter(text: str, updates: dict) -> str:
     fm_lines, body = split_frontmatter(text)
     _, spans = _parse(fm_lines)
     out = list(fm_lines)
-    # the CLI only rewrites fields it manages (status, related, branches...): an updated key is
+    # the CLI only rewrites fields it manages (status, parent, branches...): an updated key is
     # written in canonical form (a block list becomes a flow list), keeping the key line's comment
     # (a None value removes the key)
     for key in sorted((k for k in updates if k in spans), key=lambda k: spans[k]["start"], reverse=True):

@@ -1,4 +1,4 @@
-"""Projects, tasks, task relations (parent/related) and the task a session works on."""
+"""Projects, tasks, the parent relation and the task a session works on."""
 
 from __future__ import annotations
 
@@ -314,8 +314,7 @@ def decision_problems(text: str) -> list[str]:
     return problems
 
 
-# A task may have one parent (one level only: a parent cannot itself have a parent)
-# and a free list of related tasks. Both are stored by task id.
+# A task may have one parent (one level only: a parent cannot itself have a parent), stored by task id.
 
 def task_list_field(task: Task, key: str) -> list[str]:
     v = task.meta.get(key, [])

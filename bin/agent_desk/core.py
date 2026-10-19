@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 TASK_FILES = ("state.md", "decisions.md", "log.md")
 FILES_DIR = "files"  # a task's attachments: evidence kept as given, the conclusions go in the task files

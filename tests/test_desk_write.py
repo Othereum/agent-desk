@@ -13,7 +13,7 @@ os.environ.pop("CLAUDE_CODE_SESSION_ID", None)  # tests may run in a Claude Code
 
 DESK = Path(__file__).resolve().parents[1] / "bin" / "desk.py"
 
-STATE = ("---\nid: t1\ntitle: 제목\nstatus: in_progress\nproject: p\nbranches: []\nlinks: []\ndesign_doc:\n"
+STATE = ("---\nid: t1\ntitle: 제목\nstatus: in_progress\nproject: p\nbranches: []\n"
          "updated: 2026-01-01\nverified: 2026-01-01\n---\n## 목표\n\n본문\n")
 TODAY = dt.date.today().isoformat()
 
@@ -35,7 +35,7 @@ class DeskFixture(unittest.TestCase):
         pdir = self.root / "projects" / "p"
         (pdir / "tasks" / "t1").mkdir(parents=True)
         (pdir / "knowledge").mkdir()
-        (self.root / "desk.toml").write_text("schema_version = 2\n", encoding="utf-8")
+        (self.root / "desk.toml").write_text("schema_version = 3\n", encoding="utf-8")
         (pdir / "project.toml").write_text('key = "p"\nremotes = []\npaths = []\n', encoding="utf-8")
         self.state = pdir / "tasks" / "t1" / "state.md"
         self.state.write_text(STATE, encoding="utf-8", newline="\n")
@@ -264,39 +264,91 @@ class PreToolUseHook(DeskFixture):
 
 
 class SetTask(DeskFixture):
-    def test_title_design_doc_links(self):
-        r = self.run_desk("--project", "p", "set", "t1", "--title", "새: 제목 #1", "--design-doc", "https://x/doc",
-                          "--add-link", "https://x/1", "--add-link", "https://x/2")
+    def test_title(self):
+        r = self.run_desk("--project", "p", "set", "t1", "--title", "새: 제목 #1")
         self.assertEqual(r.returncode, 0, r.stderr)
         out = json.loads(r.stdout)
-        self.assertEqual((out["title"], out["links"], out["changed"]), ("새: 제목 #1", ["https://x/1", "https://x/2"], True))
-        r = self.run_desk("--project", "p", "set", "t1", "--remove-link", "https://x/1", "--design-doc", "")
-        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual((out["title"], out["changed"]), ("새: 제목 #1", True))
         text = self.state.read_text(encoding="utf-8")
         self.assertIn('title: "새: 제목 #1"', text)
-        self.assertIn("links: [https://x/2]\n", text)
-        self.assertIn("design_doc:\n", text)
         self.assertIn(f"updated: {TODAY}", text)
-        log = self.log.read_text(encoding="utf-8")
-        for line in ("제목 변경: 제목 → 새: 제목 #1", "링크 추가: https://x/1", "링크 제거: https://x/1", "설계 문서 해제"):
-            self.assertIn(line, log)
+        self.assertIn("제목 변경: 제목 → 새: 제목 #1", self.log.read_text(encoding="utf-8"))
         self.assertIn("새: 제목 #1", (self.root / "projects" / "p" / "index.md").read_text(encoding="utf-8"))
 
+    def test_parent(self):
+        parent = self.state.parents[1] / "t0" / "state.md"
+        parent.parent.mkdir()
+        parent.write_text(STATE.replace("id: t1", "id: t0"), encoding="utf-8", newline="\n")
+        r = self.run_desk("--project", "p", "set", "t1", "--parent", "t0")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual((json.loads(r.stdout)["parent"], json.loads(r.stdout)["changed"]), ("t0", True))
+        self.assertIn("parent: t0\n", self.state.read_text(encoding="utf-8"))
+        # one level only: t0 now has a child, so it cannot get a parent itself
+        r = self.run_desk("--project", "p", "set", "t0", "--parent", "t1")
+        self.assertEqual(r.returncode, 1)
+        for clear in (("--no-parent",), ("--parent", "")):
+            self.run_desk("--project", "p", "set", "t1", "--parent", "t0")
+            r = self.run_desk("--project", "p", "set", "t1", *clear)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIsNone(json.loads(r.stdout)["parent"], clear)
+        log = self.log.read_text(encoding="utf-8")
+        self.assertIn("상위 태스크 지정: t0", log)
+        self.assertIn("상위 태스크 해제: t0", log)
+
     def test_no_change(self):
-        r = self.run_desk("--project", "p", "set", "t1", "--title", "제목", "--remove-link", "https://none")
+        r = self.run_desk("--project", "p", "set", "t1", "--title", "제목")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertFalse(json.loads(r.stdout)["changed"])
         self.assertEqual(self.state.read_text(encoding="utf-8"), STATE)
 
     def test_points_to_the_command_for_other_keys(self):
-        for opt, cmd in (("--status", "adesk status"), ("--branch", "adesk link"), ("--parent", "adesk relate")):
+        for opt, cmd in (("--status", "adesk status"), ("--branch", "adesk link")):
             r = self.run_desk("--project", "p", "set", "t1", opt, "x")
             self.assertEqual(r.returncode, 2, opt)
             self.assertIn(cmd, r.stderr)
         self.assertEqual(self.state.read_text(encoding="utf-8"), STATE)
 
+    def test_relate_points_to_set_parent(self):
+        r = self.run_desk("--project", "p", "relate", "t1", "--parent", "x")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("set <id> --parent", r.stderr)
+
     def test_no_edit_alias(self):
         self.assertEqual(self.run_desk("--project", "p", "edit", "t1", "--title", "x").returncode, 2)
+
+
+class MigrateLinkFields(DeskFixture):
+    """Schema 2 → 3: links and design_doc move to the `## 링크` section of the body."""
+    def setUp(self):
+        super().setUp()
+        (self.root / "desk.toml").write_text("schema_version = 2\n", encoding="utf-8")
+        old = STATE.replace("branches: []\n", "branches: []\nlinks: [https://x/1, https://x/2]\ndesign_doc: https://x/doc\n"
+                                              "related: [t9]\n")
+        self.state.write_text(old, encoding="utf-8", newline="\n")
+        self.other = self.state.parents[1] / "t2" / "state.md"
+        self.other.parent.mkdir()
+        self.other.write_text(STATE.replace("id: t1", "id: t2").replace("branches: []\n", "branches: []\nlinks: []\ndesign_doc:\nrelated: []\n")
+                              + "\n## 링크\n\n- 이미 있던 링크\n\n## 뒤 섹션\n", encoding="utf-8", newline="\n")
+
+    def test_moves_values_and_drops_fields(self):
+        r = self.run_desk("migrate", "--dry-run")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual([c["task"] for c in json.loads(r.stdout)["changed"]], ["t1"])
+        self.assertIn("design_doc", self.state.read_text(encoding="utf-8"))
+        r = self.run_desk("migrate")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.state.read_text(encoding="utf-8"),
+                         STATE + "\n## 링크\n\n- 설계 문서: https://x/doc\n- https://x/1\n- https://x/2\n- 연관 태스크: t9\n")
+        self.assertEqual(self.other.read_text(encoding="utf-8"),
+                         STATE.replace("id: t1", "id: t2") + "\n## 링크\n\n- 이미 있던 링크\n\n## 뒤 섹션\n")
+        self.assertIn("schema_version = 3", (self.root / "desk.toml").read_text(encoding="utf-8"))
+
+    def test_appends_to_existing_section(self):
+        self.state.write_text(self.state.read_text(encoding="utf-8") + "\n## 링크\n\n- 이미 있던 링크\n\n## 뒤 섹션\n",
+                              encoding="utf-8", newline="\n")
+        self.assertEqual(self.run_desk("migrate").returncode, 0)
+        self.assertTrue(self.state.read_text(encoding="utf-8").endswith(
+            "## 링크\n\n- 이미 있던 링크\n- 설계 문서: https://x/doc\n- https://x/1\n- https://x/2\n- 연관 태스크: t9\n\n## 뒤 섹션\n"))
 
 
 class DecisionHeadings(DeskFixture):
