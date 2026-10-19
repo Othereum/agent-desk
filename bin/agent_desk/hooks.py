@@ -113,22 +113,7 @@ def task_context(root: Path, project: Project, task: Task, branch: str | None, c
                 target = others[0].id if len(others) == 1 else "<id>"
                 parts.append(f"이 브랜치의 태스크는 {names}로, 포커스와 다르다. "
                              f"사용자의 일이 {'그 태스크' if len(others) == 1 else '그중 하나'}면 `adesk focus {target}` 로 포커스를 옮길 것.")
-    parts += [
-             "",
-             "--- state.md ---",
-             read_text(task.state_path).rstrip()]
-    titles = decision_titles(task)
-    parts += ["", "--- 결정 목록 (본문은 decisions.md) ---"] + ([f"- {t}" for t in titles] or ["(없음)"])
-    parts += parent_context(project, task)
-    related = task_list_field(task, "related")
-    if related:
-        parts += ["", f"연관 태스크: {', '.join(related)} (필요할 때 `adesk list --all` 로 위치를 찾아 읽을 것)"]
-    files = attachments(task)
-    if files:
-        parts += ["", f"첨부파일({FILES_DIR}/): {', '.join(p.name for p in files)}"]
-    strays = stray_files(task)
-    if strays:
-        parts += ["", f"경고: 태스크 폴더에 예상하지 않은 파일이 있습니다(동기화 충돌 사본일 수 있음): {', '.join(strays)}. 사용자에게 알리고 병합 여부를 확인할 것."]
+    parts += task_records(project, task, focused=True)
     broken = broken_task_lines(project)
     if broken:
         parts += [""] + broken
@@ -161,7 +146,26 @@ def broken_task_lines(project: Project) -> list[str]:
             "사용자에게 알리고 고칠 것." for t in broken]
 
 
-def parent_context(project: Project, task: Task) -> list[str]:
+def task_records(project: Project, task: Task, focused: bool = False) -> list[str]:
+    """The task's records without directions for the session: what `adesk show` prints, and what
+    the focus context wraps (focused: add how the session follows the parent task)."""
+    titles = decision_titles(task)
+    parts = ["", "--- state.md ---", read_text(task.state_path).rstrip(),
+             "", "--- 결정 목록 (본문은 decisions.md) ---"] + ([f"- {t}" for t in titles] or ["(없음)"])
+    parts += parent_context(project, task, focused)
+    related = task_list_field(task, "related")
+    if related:
+        parts += ["", f"연관 태스크: {', '.join(related)} (필요할 때 `adesk show <id>` 로 읽을 것)"]
+    files = attachments(task)
+    if files:
+        parts += ["", f"첨부파일({FILES_DIR}/): {', '.join(p.name for p in files)}"]
+    strays = stray_files(task)
+    if strays:
+        parts += ["", f"경고: 태스크 폴더에 예상하지 않은 파일이 있습니다(동기화 충돌 사본일 수 있음): {', '.join(strays)}. 사용자에게 알리고 병합 여부를 확인할 것."]
+    return parts
+
+
+def parent_context(project: Project, task: Task, focused: bool = False) -> list[str]:
     parent_id = task.meta.get("parent")
     if not parent_id:
         return []
@@ -174,8 +178,8 @@ def parent_context(project: Project, task: Task) -> list[str]:
              read_text(parent.state_path).rstrip(),
              "", "--- 상위 태스크 결정 목록 (본문은 상위 태스크의 decisions.md) ---"] +
             ([f"- {t}" for t in titles] or ["(없음)"]) +
-            ["상위 태스크는 흐름 전체의 맥락이다. 이 세션의 할 일은 하위 태스크 state.md를 따르고, 상위 태스크의 유효한 결정을 따른다. "
-             "어긋나는 결정이 필요하면 사용자에게 확인하고 상위 태스크의 decisions.md에 기록할 것."])
+            (["상위 태스크는 흐름 전체의 맥락이다. 이 세션의 할 일은 하위 태스크 state.md를 따르고, 상위 태스크의 유효한 결정을 따른다. "
+              "어긋나는 결정이 필요하면 사용자에게 확인하고 상위 태스크의 decisions.md에 기록할 것."] if focused else []))
 
 
 # Per-session cache for the hooks (session_dir in model): the location and the session's task

@@ -450,6 +450,29 @@ class InjectionTest(unittest.TestCase):
         self.assertIn("다른 열린 태스크 2건:", ctx)
         self.snapshot("subtask_with_parent", "하위 태스크 세션에 상위 태스크 현황과 결정 목록을 함께 주입한다")
 
+    def test_related_task_and_files(self):
+        d = self.desk
+        old = d.new("로그인 초안", "--slug", "login-draft")
+        d.add_decision(old, "세션 방식으로 간다")
+        d.cli("close", old, "done")
+        tid = self.login_task()
+        d.cli("relate", tid, "--add", old)
+        attachment = d.base / "api-notes.md"
+        attachment.write_text("- 메모\n", encoding="utf-8")
+        d.cli("files", tid, "add", str(attachment))
+        d.focus(tid)
+        ctx = self.call("SessionStart resume (연관 태스크·첨부파일)", "session-start", {"source": "resume"})
+        self.assert_task_context(ctx, tid)
+        self.assertIn(f"연관 태스크: {old} (필요할 때 `adesk show <id>` 로 읽을 것)", ctx)
+        self.assertIn("첨부파일(files/): api-notes.md", ctx)
+        shown = d.session_cli("show", old).stdout
+        self.assertIn("- D1. 세션 방식으로 간다  (2026-01-01, 유효)", shown)
+        self.assertNotIn(TASK_LAST_LINE, shown)  # a read carries no directions for the session
+        self.assertEqual(d.cli("where", env={"CLAUDE_CODE_SESSION_ID": "s1"})["focus"], tid)
+        self.calls.append(d.normalize(f"=== adesk show {old}\n{shown.rstrip()}"))
+        self.snapshot("related_task_and_files",
+                      "연관 태스크는 ID만, 첨부파일은 이름만 주입하고, 연관 태스크는 show로 포커스를 옮기지 않고 읽는다")
+
     def test_parent_task_counts_children(self):
         d = self.desk
         parent = d.new("1.0 준비", "--slug", "v1")

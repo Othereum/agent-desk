@@ -25,7 +25,7 @@ from .model import (
 from .index import write_index
 from .doctor import doctor_tasks, project_repo
 from . import HOOK_EVENTS
-from .hooks import cmd_hook, task_context
+from .hooks import cmd_hook, task_context, task_records
 
 
 def out(data) -> None:
@@ -124,7 +124,8 @@ def cmd_focus(args) -> None:
         raise DeskError("포커스할 태스크 ID를 지정하세요 (해제는 --clear)")
     task = None if args.clear else get_task(project, args.id)
     if task and (task.archived or task.status not in OPEN_STATUSES):
-        raise DeskError(f"열린 태스크만 포커스할 수 있습니다: {task.id} ({task.status}). 종료된 태스크는 adesk reopen 으로 먼저 재개하세요")
+        raise DeskError(f"열린 태스크만 포커스할 수 있습니다: {task.id} ({task.status}). 종료된 태스크는 adesk reopen 으로 먼저 재개하세요"
+                        f"(읽기만 하려면 adesk show {task.id})")
     sid = env_session_id()
     if not sid:
         raise DeskError("Claude Code 세션 밖이라 포커스를 둘 수 없습니다(포커스는 세션마다 따로 있다. CLAUDE_CODE_SESSION_ID 없음)")
@@ -138,6 +139,20 @@ def cmd_focus(args) -> None:
         append_log(task, ["상태 변경: todo → in_progress (포커스)"])
         write_index(project)
     print(task_context(root, project, task, info.branch, chosen=True))
+
+
+def cmd_show(args) -> None:
+    """Print a task's records (text, not JSON) without touching the focus, status or log:
+    open, closed and trashed tasks alike."""
+    root = ensure_root()
+    project, _ = current_project(root, Path(args.cwd), args.project)
+    task = next((t for t in load_tasks(project, include_archive=True) if t.id.casefold() == args.id.casefold()),
+                None) or find_trashed(project, args.id) or get_task(project, args.id)  # get_task: not found at all
+    where = "휴지통" if task.trashed else "아카이브" if task.archived else "열린 태스크"
+    design_doc = task.meta.get("design_doc")
+    parts = [f"[agent-desk] 프로젝트 {project.key} · 태스크 {task.id} ({task.status}, {where}) · 읽기 전용(포커스는 바뀌지 않음)",
+             f"태스크 폴더: {task.dir.as_posix()}"] + ([f"설계 문서: {design_doc}"] if design_doc else [])
+    print("\n".join(parts + task_records(project, task)))
 
 
 def cmd_relate(args) -> None:
@@ -683,7 +698,7 @@ def cmd_doctor(args) -> None:
 # the focus file of releases before 0.8 (one current task per project, replaced by the session's task)
 OBSOLETE_FOCUS_FILE = "focus.txt"
 
-READ_ONLY_COMMANDS = {"where", "list", "hook"}
+READ_ONLY_COMMANDS = {"where", "list", "show", "hook"}
 
 
 def changes_data(args) -> bool:
@@ -727,6 +742,9 @@ def run(argv: list[str]) -> int:
     p = sub.add_parser("focus", help="이 세션의 포커스(작업할 태스크)를 정하고 그 기록을 텍스트로 출력 (todo면 진행 중으로)")
     p.add_argument("id", nargs="?")
     p.add_argument("--clear", action="store_true", help="이 세션의 포커스 해제")
+
+    p = sub.add_parser("show", help="태스크 기록을 텍스트로 출력 (포커스·상태를 바꾸지 않음, 종료·휴지통 태스크 포함)")
+    p.add_argument("id")
 
     p = sub.add_parser("relate", help="태스크의 상위·연관 관계 변경")
     p.add_argument("id")
@@ -817,7 +835,7 @@ def run(argv: list[str]) -> int:
     args = ap.parse_args(argv)
     handlers = {
         "where": cmd_where, "project-init": cmd_project_init, "new": cmd_new, "set": cmd_set,
-        "link": cmd_link, "unlink": cmd_unlink, "relate": cmd_relate, "focus": cmd_focus, "status": cmd_status, "migrate": cmd_migrate, "close": cmd_close, "reopen": cmd_reopen,
+        "link": cmd_link, "unlink": cmd_unlink, "relate": cmd_relate, "focus": cmd_focus, "show": cmd_show, "status": cmd_status, "migrate": cmd_migrate, "close": cmd_close, "reopen": cmd_reopen,
         "delete": cmd_delete, "restore": cmd_restore, "list": cmd_list, "index": cmd_index, "files": cmd_files,
         "put": lambda a: write_desk_file(a, append=False), "append": lambda a: write_desk_file(a, append=True), "hook": lambda a: cmd_hook(a.event), "doctor": cmd_doctor,
     }
