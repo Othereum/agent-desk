@@ -10,17 +10,17 @@ import tomllib
 from pathlib import Path
 
 from .core import (
-    CLOSED_STATUSES, DEFAULT_ID_TEMPLATE, DEFAULT_SHARED_BRANCHES, DeskError, LEGACY_STATUSES, OPEN_STATUSES,
+    CLOSED_STATUSES, DEFAULT_SHARED_BRANCHES, DeskError, LEGACY_STATUSES, OPEN_STATUSES,
     PYTHON_ALIAS_MESSAGE, SCHEMA_VERSION, TASK_FILES, desk_root, ensure_root, now_minute, python_alias,
     move_dir, read_text, root_lock, schema_version, today, write_schema_version, write_text,
 )
 from .frontmatter import format_scalar, format_value, parse_frontmatter, split_frontmatter, update_frontmatter
 from .gitinfo import RepoInfo, is_under, native_path, normalize_path, repo_info
 from .model import (
-    Project, TRASH_DIR, TRASH_LOG_LINE, append_log, build_id, check_branch_free, children_of, current_project,
-    decision_problems, env_session_id, find_task_by_branch, find_trashed, get_project, get_session_task, get_task,
+    Project, TRASH_DIR, TRASH_LOG_LINE, append_log, build_id, check_branch_linkable, children_of, current_project,
+    decision_problems, env_session_id, find_trashed, get_project, get_session_task, get_task,
     load_projects, load_tasks, load_trash, main_worktree, match_project, projects_dir, render_template,
-    resolve_parent, set_meta, set_session_task, task_dir_of, task_list_field, touch_task, trashed_at,
+    resolve_parent, set_meta, set_session_task, task_dir_of, task_list_field, tasks_on_branch, touch_task, trashed_at,
 )
 from .index import write_index
 from .doctor import doctor_tasks, project_repo
@@ -48,7 +48,7 @@ def cmd_where(args) -> None:
     info = repo_info(Path(args.cwd))
     project = match_project(root, info) if (root / "projects").is_dir() else None
     focus = get_session_task(project, env_session_id()) if project else None
-    branch_task = find_task_by_branch(project, info.branch) if project and info.branch else None
+    branch_tasks = tasks_on_branch(project, info.branch) if project and info.branch else []
     out({
         "root": str(root),
         "repo": str(info.toplevel) if info.toplevel else None,
@@ -58,7 +58,7 @@ def cmd_where(args) -> None:
         "session": env_session_id(),
         "focus": focus.id if focus else None,
         "focus_dir": str(focus.dir) if focus else None,
-        "branch_task": branch_task.id if branch_task else None,
+        "branch_tasks": [t.id for t in branch_tasks],
     })
 
 
@@ -81,7 +81,6 @@ def cmd_project_init(args) -> None:
     text = (f'key = "{args.key}"\n'
             f"remotes = {toml_list(remotes)}\n"
             f"paths = {toml_list([str(main_worktree(info.toplevel)).replace(chr(92), '/')])}\n"
-            f'id_template = "{args.id_template}"\n'
             f"shared_branches = {toml_list(shared)}\n"
             f'lang = "{args.lang}"\n')
     pdir = projects_dir(root) / args.key
@@ -94,34 +93,27 @@ def cmd_project_init(args) -> None:
 
 def cmd_new(args) -> None:
     root = ensure_root()
-    project, info = current_project(root, Path(args.cwd), args.project)
-    branch = None
-    if not args.no_branch:
-        branch = args.branch or info.branch
-        if not branch:
-            raise DeskError("현재 브랜치를 알 수 없습니다. --branch 또는 --no-branch 를 지정하세요")
-        check_branch_free(project, branch)
+    project, _ = current_project(root, Path(args.cwd), args.project)
+    # only creates the records: starting the work is `focus`, and a branch is linked only when named
+    branch = args.branch
+    if branch:
+        check_branch_linkable(project, branch)
     parent = resolve_parent(project, args.parent) if args.parent else None
     related = [get_task(project, r).id for r in split_csv(args.related)]
-    task_id = build_id(project, branch, args.slug)
+    task_id = build_id(project, args.slug)
     tdir = project.dir / "tasks" / task_id
     values = {
         "id": task_id, "title": format_scalar(args.title), "project": project.key,
         "branches": format_value([branch] if branch else []),
         "parent": parent.id if parent else "", "related": format_value(related),
-        "status": "todo" if args.todo else "in_progress",
+        "status": "todo",
         "date": today(), "datetime": now_minute(),
     }
     for name in TASK_FILES:
         write_text(tdir / name, render_template(project.lang, name, values))
-    # creating a task to work on now makes it this session's focus; a todo task is for later
-    sid = env_session_id()
-    focused = bool(sid) and not args.todo and not args.no_focus
-    if focused:
-        set_session_task(sid, project, task_id)
     write_index(project)
     out({"task": task_id, "dir": str(tdir), "branch": branch,
-         "parent": parent.id if parent else None, "related": related, "focused": focused})
+         "parent": parent.id if parent else None, "related": related})
 
 
 def cmd_focus(args) -> None:
@@ -197,7 +189,7 @@ def cmd_link(args) -> None:
     if branch.casefold() in (b.casefold() for b in task.branches):
         out({"task": task.id, "branches": task.branches, "changed": False})
         return
-    check_branch_free(project, branch, task.id)
+    check_branch_linkable(project, branch)
     set_meta(task, {"branches": task.branches + [branch]})
     append_log(task, [f"브랜치 연결: {branch}"])
     write_index(project)
@@ -230,9 +222,6 @@ def cmd_status(args) -> None:
     task = get_task(project, args.id)
     if task.archived:
         raise DeskError("아카이브된 태스크입니다. adesk reopen 을 사용하세요")
-    if args.status == "in_progress":
-        for b in task.branches:
-            check_branch_free(project, b, task.id)
     old = task.status
     set_meta(task, {"status": args.status})
     append_log(task, [f"상태 변경: {old} → {args.status}"])
@@ -267,8 +256,6 @@ def cmd_reopen(args) -> None:
     task = get_task(project, args.id)
     if not task.archived:
         raise DeskError("아카이브된 태스크가 아닙니다")
-    for b in task.branches:
-        check_branch_free(project, b, task.id)
     dest = project.dir / "tasks" / task.id
     move_dir(task.dir, dest)
     task.dir, task.archived = dest, False
@@ -315,9 +302,6 @@ def cmd_restore(args) -> None:
         if t.id.casefold() == task.id.casefold():
             raise DeskError(f"같은 ID의 태스크가 이미 있습니다: {t.dir}")
     archived = task.status in CLOSED_STATUSES
-    if not archived:
-        for b in task.branches:
-            check_branch_free(project, b, task.id)
     dest = project.dir / ("archive" if archived else "tasks") / task.id
     if dest.exists():  # a leftover folder without state.md
         raise DeskError(f"같은 이름의 폴더가 이미 있습니다: {dest}")
@@ -657,20 +641,15 @@ def run(argv: list[str]) -> int:
 
     p = sub.add_parser("project-init", help="현재 저장소를 프로젝트로 등록")
     p.add_argument("key")
-    p.add_argument("--id-template", default=DEFAULT_ID_TEMPLATE)
     p.add_argument("--shared", help="공용 브랜치 목록 (쉼표 구분)")
     p.add_argument("--lang", default="ko")
 
-    p = sub.add_parser("new", help="태스크 생성")
+    p = sub.add_parser("new", help="태스크 생성 (예정 상태로 기록만 만든다. 착수는 focus)")
     p.add_argument("--title", required=True)
-    p.add_argument("--slug", help="브랜치 없는 태스크의 ID 슬러그")
-    p.add_argument("--branch", help="연결할 브랜치 (기본: 현재 브랜치)")
-    p.add_argument("--no-branch", action="store_true")
+    p.add_argument("--slug", required=True, help="ID 슬러그 (ID는 <yymmdd>-<slug>)")
+    p.add_argument("--branch", help="이 태스크의 작업을 할 브랜치에 연결 (ID에는 영향 없음)")
     p.add_argument("--parent", help="상위 태스크 ID (한 단계만 허용)")
     p.add_argument("--related", help="연관 태스크 ID (쉼표 구분)")
-    p.add_argument("--no-focus", action="store_true", help="만든 태스크에 이 세션의 포커스를 두지 않음 (서브에이전트 등)")
-    p.add_argument("--no-open", dest="no_focus", action="store_true", help=argparse.SUPPRESS)  # a guess
-    p.add_argument("--todo", action="store_true", help="착수 전(todo) 태스크로 만듦. 포커스를 두지 않음")
 
     p = sub.add_parser("focus", help="이 세션의 포커스(작업할 태스크)를 정하고 그 기록을 텍스트로 출력 (todo면 진행 중으로)")
     p.add_argument("id", nargs="?")

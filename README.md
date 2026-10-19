@@ -21,8 +21,7 @@ claude plugin install agent-desk@agent-desk
 
 ```
 나      이 저장소를 agent-desk에 등록해줘.
-Claude  프로젝트 key는 myapp, 태스크 ID는 기본 규칙(날짜-브랜치),
-        main·develop은 공용 브랜치로 둘까요?
+Claude  프로젝트 key는 myapp, main·develop은 공용 브랜치로 둘까요?
 나      응
 Claude  등록했습니다. 이제 이 저장소에서 하는 일을 태스크로 기록할 수 있습니다.
 ```
@@ -35,7 +34,7 @@ Claude  등록했습니다. 이제 이 저장소에서 하는 일을 태스크�
 나      로그인 기능 만들 거야. 이번엔 이메일 로그인만 하고 소셜 로그인은 빼는걸로 하자.
 Claude  태스크로 기록하면서 진행할까요?
 나      응
-Claude  태스크 261016-feature__login을 만들어 지금 브랜치(feature/login)에 연결했습니다.
+Claude  태스크 261016-login을 만들어 지금 브랜치(feature/login)에 연결했습니다.
         목표: 이메일 로그인, 소셜 로그인은 범위 밖
 ```
 
@@ -90,11 +89,11 @@ agent-desk가 관리하는 기록 공간을 **데스크**라고 부릅니다.
 ```
 git 브랜치                 agent-desk 태스크
 ─────────────              ─────────────────────────────────────────────
-feature/login   ───▶       tasks/261016-feature__login/
+feature/login   ───▶       tasks/261016-login/
                              ├─ state.md       지금 어디까지, 다음에 할 일
                              ├─ decisions.md   무엇을 왜 정했나 (기각한 대안 포함)
                              └─ log.md         무엇을 알아냈나
-fix/crash       ───▶       tasks/261016-fix__crash/
+fix/crash       ───▶       tasks/261016-crash-on-save/
 main            ···        브랜치 없는 태스크 (요청으로 골라 포커스)
 ```
 
@@ -106,7 +105,7 @@ main            ···        브랜치 없는 태스크 (요청으로 골라 �
 <AGENT_DESK_ROOT>/
 ├─ desk.toml                          스키마 버전
 └─ projects/<KEY>/                    저장소 하나 = 프로젝트 하나
-    ├─ project.toml                   프로젝트 설정 (원격 URL, ID 규칙, 공용 브랜치)
+    ├─ project.toml                   프로젝트 설정 (원격 URL, 공용 브랜치)
     ├─ index.md                       태스크 목록 (자동 생성)
     ├─ tasks/<id>/                    열린 태스크(예정·진행 중·보류)
     │   ├─ state.md                     현황 (덮어씀)

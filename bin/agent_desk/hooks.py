@@ -14,8 +14,8 @@ from .core import (
 from .frontmatter import parse_frontmatter
 from .gitinfo import is_under, native_path, normalize_path, repo_info
 from .model import (
-    DECISION_LINE, Project, Task, find_task_by_branch, get_session_task, get_task, head_branch, load_tasks,
-    match_project, safe_name, session_dir, session_tasks, strip_comments, stray_files, task_list_field,
+    DECISION_LINE, Project, Task, get_session_task, get_task, head_branch, load_tasks,
+    match_project, safe_name, session_dir, session_tasks, strip_comments, stray_files, task_list_field, tasks_on_branch,
 )
 
 
@@ -59,23 +59,30 @@ def candidates_context(root: Path, project: Project, branch: str | None, current
     # an unreadable task may be this branch's: say so before anything suggests a new task
     lines = [f"{head} · 포커스 {now}"] + broken_task_lines(project) + common
     open_tasks = [t for t in load_tasks(project) if t.status in OPEN_STATUSES]
-    branch_task = find_task_by_branch(project, branch) if branch else None
-    if branch_task and current and branch_task.id == current.id:
-        branch_task = None
-    if branch_task:
-        lines.append(f"이 브랜치의 태스크: {open_task_line(branch_task)[2:]}")
-        others = [t for t in open_tasks if t.id != branch_task.id and not (current and t.id == current.id)]
+    branch_tasks = [t for t in tasks_on_branch(project, branch) if not (current and t.id == current.id)] if branch else []
+    if len(branch_tasks) == 1:
+        lines.append(f"이 브랜치의 태스크: {open_task_line(branch_tasks[0])[2:]}")
+    elif branch_tasks:
+        lines += ["", "--- 이 브랜치의 태스크 ---"] + [open_task_line(t) for t in branch_tasks] + [""]
+    if branch_tasks:
+        shown = {t.id for t in branch_tasks} | ({current.id} if current else set())
+        others = [t for t in open_tasks if t.id not in shown]
         if others:
             lines.append(f"다른 열린 태스크 {len(others)}건: 필요할 때 `adesk list` 로 확인할 것.")
     elif open_tasks and not current:
         lines += ["", "--- 열린 태스크 ---"] + [open_task_line(t) for t in open_tasks] + [""]
     if agent:
         lines.append("서브에이전트는 이 세션의 포커스를 바꾸지 않는다(`adesk focus` 금지). 기록은 지시받은 태스크 ID로 한다.")
-    elif current and branch_task:
-        lines.append(f"사용자의 일이 이 브랜치의 태스크로 바뀌었으면 `adesk focus {branch_task.id}` 로 포커스를 옮길 것.")
-    elif not current and (branch_task or open_tasks):
-        pick = ("사용자의 요청이 이 브랜치의 일이면 묻지 않고 `adesk focus <id>` 로 포커스하고, 다른 태스크를 가리키거나 애매하면 묻는다."
-                if branch_task else "사용자의 요청이 이 중 하나를 분명히 가리키면 `adesk focus <id>` 로 포커스하고, 아니면 묻는다.")
+    elif current and branch_tasks:
+        target = branch_tasks[0].id if len(branch_tasks) == 1 else "<id>"
+        lines.append(f"사용자의 일이 이 브랜치의 태스크로 바뀌었으면 `adesk focus {target}` 로 포커스를 옮길 것.")
+    elif not current and (branch_tasks or open_tasks):
+        if len(branch_tasks) == 1:
+            pick = "사용자의 요청이 이 브랜치의 일이면 묻지 않고 `adesk focus <id>` 로 포커스하고, 다른 태스크를 가리키거나 애매하면 묻는다."
+        elif branch_tasks:
+            pick = "사용자의 요청에 맞는 이 브랜치의 태스크가 분명하면 `adesk focus <id>` 로 포커스하고, 애매하면 묻는다."
+        else:
+            pick = "사용자의 요청이 이 중 하나를 분명히 가리키면 `adesk focus <id>` 로 포커스하고, 아니면 묻는다."
         lines.append(f"포커스는 사용자의 요청으로 정한다. {pick} 태스크와 무관한 세션이면 포커스하지 않고, 포커스 전에는 기록하지 않는다.")
     return "\n".join(lines + [RULES_LINE])
 
@@ -97,10 +104,14 @@ def task_context(root: Path, project: Project, task: Task, branch: str | None, c
     if task.status == "todo":
         parts.append("이 태스크는 착수 전(todo)이다. 작업을 시작하면 `adesk status <id> in_progress` 로 바꿀 것.")
     if not chosen and branch:
-        other = find_task_by_branch(project, branch)
-        if other and other.id != task.id and other.id != (task.meta.get("parent") or ""):
-            parts.append(f"이 브랜치의 태스크는 {other.id}({other.meta.get('title', '')})로, 포커스와 다르다. "
-                         f"사용자의 일이 그 태스크면 `adesk focus {other.id}` 로 포커스를 옮길 것.")
+        on_branch = tasks_on_branch(project, branch)
+        if task.id not in (t.id for t in on_branch):
+            others = [t for t in on_branch if t.id != (task.meta.get("parent") or "")]
+            if others:
+                names = ", ".join(f"{t.id}({t.meta.get('title', '')})" for t in others)
+                target = others[0].id if len(others) == 1 else "<id>"
+                parts.append(f"이 브랜치의 태스크는 {names}로, 포커스와 다르다. "
+                             f"사용자의 일이 {'그 태스크' if len(others) == 1 else '그중 하나'}면 `adesk focus {target}` 로 포커스를 옮길 것.")
     parts += [
              "",
              "--- state.md ---",

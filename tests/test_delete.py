@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bin"))
 from agent_desk import cli
 from agent_desk.core import DeskError
 from agent_desk.hooks import parent_context
-from agent_desk.model import check_branch_free, find_task_by_branch, get_project
+from agent_desk.model import get_project, tasks_on_branch
 
 os.environ.pop("CLAUDE_CODE_SESSION_ID", None)  # tests may run in a Claude Code session: leave its task alone
 
@@ -59,7 +59,7 @@ class Delete(unittest.TestCase):
         return e
 
     def new(self, slug, *extra):
-        return self.ok("new", "--title", slug, "--no-branch", "--slug", slug, "--no-focus", *extra)["task"]
+        return self.ok("new", "--title", slug, "--slug", slug, *extra)["task"]
 
     @property
     def project(self):
@@ -123,21 +123,20 @@ class Delete(unittest.TestCase):
         self.assertEqual(log.count("태스크 종료: done"), 1)
         self.assertFalse((self.pdir / "tasks" / tid).exists())
 
-    def test_branch_is_freed(self):
-        tid = self.ok("new", "--title", "x", "--branch", "feat")["task"]
+    def test_trashed_task_leaves_branch(self):
+        tid = self.ok("new", "--title", "x", "--slug", "x", "--branch", "feat")["task"]
         self.ok("delete", tid)
-        self.assertIsNone(find_task_by_branch(self.project, "feat"))
-        check_branch_free(self.project, "feat")
+        self.assertEqual(tasks_on_branch(self.project, "feat"), [])
         other = self.new("other")
         self.ok("link", other, "--branch", "feat")
-        # restoring would put two open tasks on one branch
-        self.assertIn("feat", self.fail_with("restore", tid))
-        self.assertTrue((self.pdir / "trash" / tid).exists())
+        self.ok("restore", tid)  # a branch may carry several open tasks
+        self.assertEqual(sorted(t.id for t in tasks_on_branch(self.project, "feat")), sorted([tid, other]))
 
     def test_focus_in_trash(self):
         with mock.patch.dict(os.environ, {"CLAUDE_CODE_SESSION_ID": "s1", "TEMP": self._tmp.name,
                                           "TMP": self._tmp.name, "TMPDIR": self._tmp.name}):
-            tid = self.ok("new", "--title", "f", "--no-branch", "--slug", "f")["task"]  # focused in s1
+            tid = self.new("f")
+            self.assertEqual(self.run_cli("focus", tid)[0], 0)
             self.assertEqual(self.ok("where")["focus"], tid)
             self.ok("delete", tid)
             self.assertIsNone(self.ok("where")["focus"])  # a trashed task is not the focus

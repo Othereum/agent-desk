@@ -10,7 +10,7 @@ import tomllib
 from pathlib import Path
 
 from .core import (
-    DEFAULT_ID_TEMPLATE, DEFAULT_SHARED_BRANCHES, DeskError, LEGACY_STATUSES, OPEN_STATUSES, PLUGIN_ROOT, TASK_FILES,
+    DEFAULT_SHARED_BRANCHES, DeskError, LEGACY_STATUSES, OPEN_STATUSES, PLUGIN_ROOT, TASK_FILES,
     is_write_temp, now_minute, read_text, today, write_text,
 )
 from .frontmatter import parse_frontmatter, update_frontmatter
@@ -20,10 +20,6 @@ from .gitinfo import RepoInfo, normalize_path, normalize_remote, repo_info
 class Project:
     def __init__(self, key: str, dir: Path, config: dict):
         self.key, self.dir, self.config = key, dir, config
-
-    @property
-    def id_template(self) -> str:
-        return self.config.get("id_template", DEFAULT_ID_TEMPLATE)
 
     @property
     def shared_branches(self) -> list[str]:
@@ -195,11 +191,10 @@ def get_task(project: Project, task_id: str) -> Task:
     raise DeskError(f"태스크를 찾을 수 없습니다: {project.key}/{task_id}")
 
 
-def find_task_by_branch(project: Project, branch: str) -> Task | None:
-    for t in load_tasks(project):
-        if t.status in OPEN_STATUSES and branch.casefold() in (b.casefold() for b in t.branches):
-            return t
-    return None
+def tasks_on_branch(project: Project, branch: str) -> list[Task]:
+    """The open tasks whose work happens on the branch. A branch may carry several."""
+    return [t for t in load_tasks(project)
+            if t.status in OPEN_STATUSES and branch.casefold() in (b.casefold() for b in t.branches)]
 
 
 _INVALID = re.compile(r'[<>:"\\|?*\x00-\x1f]')
@@ -212,17 +207,10 @@ def sanitize(name: str) -> str:
     return s.rstrip(". ") or "task"
 
 
-def build_id(project: Project, branch: str | None, slug: str | None) -> str:
-    d = dt.date.today()
-    if branch:
-        raw = project.id_template.format(
-            branch=branch, slug=slug or branch,
-            yymmdd=d.strftime("%y%m%d"), yyyymmdd=d.strftime("%Y%m%d"))
-    else:
-        if not slug:
-            raise DeskError("브랜치 없이 만드는 태스크에는 --slug 가 필요합니다")
-        raw = f"{d.strftime('%y%m%d')}-{slug}"
-    base = sanitize(raw)
+def build_id(project: Project, slug: str) -> str:
+    # never from a branch name: a branch may carry several tasks and is often linked after creation.
+    # id_template in a project.toml of releases before 0.11 is ignored
+    base = sanitize(f"{dt.date.today().strftime('%y%m%d')}-{slug}")
     taken = {t.id.casefold() for t in load_tasks(project, include_archive=True)}
     # a trashed task keeps its ID, so recreating a deleted task gets ~2 rather than an error
     taken |= {t.id.casefold() for t in load_trash(project)}
@@ -234,17 +222,10 @@ def build_id(project: Project, branch: str | None, slug: str | None) -> str:
     return f"{base}~{n}"
 
 
-def check_branch_free(project: Project, branch: str, task_id: str | None = None) -> None:
+def check_branch_linkable(project: Project, branch: str) -> None:
+    # every task on a shared branch would be a candidate in every session there: the link says nothing
     if project.is_shared(branch):
         raise DeskError(f"공용 브랜치는 태스크에 연결할 수 없습니다: {branch}")
-    # an unreadable state.md hides its branches, so this branch may already be taken
-    broken = [t.id for t in load_tasks(project) if t.status == "?"]
-    if broken:
-        raise DeskError(f"state.md frontmatter를 읽을 수 없는 태스크가 있어 브랜치 중복을 확인할 수 없습니다: "
-                        f"{', '.join(broken)}. 먼저 고치세요(doctor로 위치 확인)")
-    owner = find_task_by_branch(project, branch)
-    if owner and (task_id is None or owner.id.casefold() != task_id.casefold()):
-        raise DeskError(f"브랜치 {branch} 는 이미 진행 중인 태스크 {owner.id} 에 연결되어 있습니다")
 
 
 def render_template(lang: str, name: str, values: dict) -> str:

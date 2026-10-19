@@ -15,4 +15,4 @@
 
 === PostToolUse Edit state.md (frontmatter 깨짐)
 [additionalContext PostToolUse]
-[agent-desk] 방금 수정한 <TMP>/desk/projects/myapp/tasks/<YYMMDD>-feature__login/state.md 의 frontmatter를 읽을 수 없다: frontmatter 3번째 줄: 따옴표가 닫히지 않았습니다: title: "로그인. 사본을 고쳐 `adesk put` 으로 바로잡을 것(agent-desk:desk 스킬 "파일별 작성 규칙").
+[agent-desk] 방금 수정한 <TMP>/desk/projects/myapp/tasks/<YYMMDD>-login/state.md 의 frontmatter를 읽을 수 없다: frontmatter 3번째 줄: 따옴표가 닫히지 않았습니다: title: "로그인. 사본을 고쳐 `adesk put` 으로 바로잡을 것(agent-desk:desk 스킬 "파일별 작성 규칙").

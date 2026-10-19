@@ -16,7 +16,6 @@ OPEN_STATUSES = ("todo", "in_progress", "on_hold")
 CLOSED_STATUSES = ("done", "cancelled")
 # schema 1 names, read as the new ones until `adesk migrate` rewrites them
 LEGACY_STATUSES = {"active": "in_progress", "paused": "on_hold", "abandoned": "cancelled"}
-DEFAULT_ID_TEMPLATE = "{yymmdd}-{branch}"
 DEFAULT_SHARED_BRANCHES = ["main", "master", "develop"]
 
 

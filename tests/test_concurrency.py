@@ -111,7 +111,7 @@ class DeskRepo(unittest.TestCase):
         return r
 
     def new_task(self, slug):
-        return json.loads(self.run_desk("new", "--title", slug, "--no-branch", "--no-focus", "--slug", slug).stdout)["task"]
+        return json.loads(self.run_desk("new", "--title", slug, "--slug", slug).stdout)["task"]
 
     def popen(self, *args):
         return subprocess.Popen(self.desk + list(args), env=self.env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
@@ -128,7 +128,7 @@ class ParallelCommands(DeskRepo):
         others = [self.new_task(f"b{i}") for i in range(4)]
         procs = [self.popen("relate", a, "--add", b) for b in others]
         procs += [self.popen("link", a, "--branch", f"br{i}") for i in range(4)]
-        procs += [self.popen("new", "--title", f"c{i}", "--no-branch", "--no-focus", "--slug", f"c{i}") for i in range(2)]
+        procs += [self.popen("new", "--title", f"c{i}", "--slug", f"c{i}") for i in range(2)]
         self.wait_ok(procs)
         task = json.loads(self.run_desk("list").stdout)[0]
         self.assertEqual(task["id"], a)

@@ -293,7 +293,8 @@ class InjectionTest(unittest.TestCase):
         """README "다음 날 이어서": feature/login with state and decision D1."""
         d = self.desk
         d.checkout("-b", "feature/login")
-        tid = d.new("로그인 기능")
+        tid = d.new("로그인 기능", "--slug", "login", "--branch", "feature/login")
+        d.cli("status", tid, "in_progress")
         d.fill_state(tid, goal="로그인 기능을 만든다.", now="- 로그인 API 완료.", next="- 토큰 갱신")
         d.add_decision(tid, "세션 캐시는 Redis에 둔다")
         return tid
@@ -316,9 +317,9 @@ class InjectionTest(unittest.TestCase):
     def test_no_task_lists_open_tasks(self):
         d = self.desk
         d.checkout("-b", "feature/login")
-        d.new("로그인 기능")
+        d.new("로그인 기능", "--slug", "login", "--branch", "feature/login")
         d.checkout("main")
-        d.new("검색 개선", "--no-branch", "--slug", "search-improve", "--todo")
+        d.new("검색 개선", "--slug", "search-improve")
         ctx = self.call("SessionStart startup (main)", "session-start", {"source": "startup"})
         self.assert_candidates(ctx)
         self.assertIn("--- 열린 태스크 ---", ctx)
@@ -328,7 +329,7 @@ class InjectionTest(unittest.TestCase):
 
     def test_branch_task_recommended(self):
         tid = self.login_task()
-        self.desk.new("검색 개선", "--no-branch", "--slug", "search-improve", "--todo")
+        self.desk.new("검색 개선", "--slug", "search-improve")
         ctx = self.call("SessionStart startup", "session-start", {"source": "startup"})
         self.assert_candidates(ctx)
         self.assertIn(f"이 브랜치의 태스크: {tid} (로그인 기능) · in_progress", ctx)
@@ -336,6 +337,26 @@ class InjectionTest(unittest.TestCase):
         self.assertIn("사용자의 요청이 이 브랜치의 일이면 묻지 않고 `adesk focus <id>` 로 포커스하고", ctx)
         self.snapshot("branch_task_recommended",
                       "브랜치에 연결된 태스크는 기록을 넣지 않고 추천한다 (README 다음 날 이어서)")
+
+    def test_branch_tasks_several(self):
+        d = self.desk
+        login = self.login_task()
+        bug = d.new("로그인 오류 수정", "--slug", "login-bugfix", "--branch", "feature/login")
+        d.new("검색 개선", "--slug", "search-improve")
+        ctx = self.call("SessionStart startup", "session-start", {"source": "startup"})
+        self.assert_candidates(ctx)
+        self.assertIn("--- 이 브랜치의 태스크 ---", ctx)
+        self.assertIn(f"- {login} (로그인 기능) · in_progress · 브랜치 feature/login", ctx)
+        self.assertIn(f"- {bug} (로그인 오류 수정) · todo · 브랜치 feature/login", ctx)
+        self.assertIn("다른 열린 태스크 1건:", ctx)
+        self.assertIn("사용자의 요청에 맞는 이 브랜치의 태스크가 분명하면", ctx)
+        self.assertEqual(sorted(d.cli("where")["branch_tasks"]), sorted([login, bug]))
+        d.focus(bug)
+        ctx = self.call("SessionStart resume (이 브랜치의 태스크 하나에 포커스)", "session-start", {"source": "resume"})
+        self.assert_task_context(ctx, bug)
+        self.assertNotIn("포커스와 다르다", ctx)
+        self.snapshot("branch_tasks_several",
+                      "한 브랜치에 열린 태스크가 여럿이면 목록으로 보여 주고 요청에 맞는 것을 고르게 한다")
 
     def test_focus_then_compact_resume_clear(self):
         d = self.desk
@@ -361,28 +382,27 @@ class InjectionTest(unittest.TestCase):
     def test_focus_todo_starts_it(self):
         d = self.desk
         d.checkout("-b", "feature/search")
-        tid = d.new("검색 개선", "--todo")
+        tid = d.new("검색 개선", "--slug", "search", "--branch", "feature/search")
         ctx = self.call("SessionStart startup", "session-start", {"source": "startup"})
         self.assertIn(f"이 브랜치의 태스크: {tid} (검색 개선) · todo", ctx)
         shown = d.focus(tid)
         self.assertIn(f"· 포커스 {tid} (in_progress)", shown.splitlines()[0])
         self.assertIn("상태 변경: todo → in_progress (포커스)", (d.task_dir(tid) / "log.md").read_text(encoding="utf-8"))
 
-    def test_new_focuses_task_in_session(self):
+    def test_new_only_creates(self):
         d = self.desk
-        r = d.cli("new", "--title", "문서 정리", "--no-branch", "--slug", "docs", env={"CLAUDE_CODE_SESSION_ID": "s1"})
-        self.assertTrue(r["focused"])
-        self.assert_task_context(self.call("SessionStart resume", "session-start", {"source": "resume"}), r["task"])
-        todo = d.cli("new", "--title", "검색 개선", "--no-branch", "--slug", "search", "--todo",
-                     env={"CLAUDE_CODE_SESSION_ID": "s1"})
-        self.assertFalse(todo["focused"])  # a task for later is not this session's work
-        self.assertFalse(d.cli("new", "--title", "x", "--no-branch", "--slug", "x")["focused"])  # outside a session
+        d.checkout("-b", "feature/login")
+        r = d.cli("new", "--title", "문서 정리", "--slug", "docs")  # in session s1
+        self.assertIsNone(d.cli("where")["focus"])  # starting the work is `adesk focus`
+        self.assertEqual(d.cli("where")["branch_tasks"], [])  # the current branch is not linked by default
+        self.assertIn(f"- {r['task']} (문서 정리) · todo · 브랜치 없음",
+                      self.call("SessionStart startup", "session-start", {"source": "startup"}))
 
     def test_focus_differs_from_branch(self):
         d = self.desk
         d.git("branch", "feature/login")
-        login = d.new("로그인 기능", "--branch", "feature/login")
-        docs = d.new("문서 정리", "--no-branch", "--slug", "docs")
+        login = d.new("로그인 기능", "--slug", "login", "--branch", "feature/login")
+        docs = d.new("문서 정리", "--slug", "docs")
         self.call("SessionStart startup (main)", "session-start", {"source": "startup"})
         d.focus(docs)
         self.assertIsNone(self.call("UserPromptSubmit (처음 정한 포커스는 알리지 않음)", "user-prompt-submit", {}))
@@ -400,8 +420,8 @@ class InjectionTest(unittest.TestCase):
 
     def test_focus_change_notice(self):
         d = self.desk
-        a = d.new("로그인 기능", "--no-branch", "--slug", "login")
-        b = d.new("문서 정리", "--no-branch", "--slug", "docs")
+        a = d.new("로그인 기능", "--slug", "login")
+        b = d.new("문서 정리", "--slug", "docs")
         self.call("SessionStart startup", "session-start", {"source": "startup"})
         d.focus(a)
         self.assertIsNone(self.call("UserPromptSubmit (처음 정한 포커스)", "user-prompt-submit", {}))
@@ -416,12 +436,12 @@ class InjectionTest(unittest.TestCase):
 
     def test_subtask_with_parent(self):
         d = self.desk
-        parent = d.new("1.0 준비", "--no-branch", "--slug", "v1")
+        parent = d.new("1.0 준비", "--slug", "v1")
         d.fill_state(parent, goal="1.0을 낸다.")
         d.add_decision(parent, "1.0 기준")
-        d.new("문서 정리", "--no-branch", "--slug", "docs", "--parent", parent, "--todo")
+        d.new("문서 정리", "--slug", "docs", "--parent", parent)
         d.checkout("-b", "feature/login")
-        child = d.new("로그인 기능", "--parent", parent)
+        child = d.new("로그인 기능", "--slug", "login", "--branch", "feature/login", "--parent", parent)
         d.focus(child)
         ctx = self.call("SessionStart resume (하위 태스크)", "session-start", {"source": "resume"})
         self.assert_task_context(ctx, child)
@@ -432,11 +452,11 @@ class InjectionTest(unittest.TestCase):
 
     def test_parent_task_counts_children(self):
         d = self.desk
-        parent = d.new("1.0 준비", "--no-branch", "--slug", "v1")
+        parent = d.new("1.0 준비", "--slug", "v1")
         d.focus(parent)
         base = self.call("SessionStart resume (상위 태스크)", "session-start", {"source": "resume"})
-        d.new("문서 정리", "--no-branch", "--slug", "docs", "--parent", parent, "--todo")
-        d.new("로그인 기능", "--branch", "feature/login", "--parent", parent)
+        d.new("문서 정리", "--slug", "docs", "--parent", parent)
+        d.new("로그인 기능", "--slug", "login", "--branch", "feature/login", "--parent", parent)
         ctx = self.call("SessionStart resume (하위 2건)", "session-start", {"source": "resume"})
         self.assert_task_context(ctx, parent)
         self.assert_differs(base, ctx, added=["다른 열린 태스크 2건(하위 2건):"])
@@ -457,7 +477,7 @@ class InjectionTest(unittest.TestCase):
 
     def test_location_change_worktree(self):
         d = self.desk
-        tid = d.new("로그인 기능", "--branch", "feature/login")
+        tid = d.new("로그인 기능", "--slug", "login", "--branch", "feature/login")
         wt = self.base / "myapp-wt"
         d.git("worktree", "add", "-q", str(wt), "-b", "feature/login")
         self.call("SessionStart startup (main)", "session-start", {"source": "startup"})
@@ -481,7 +501,7 @@ class InjectionTest(unittest.TestCase):
 
     def test_old_knowledge_is_ignored(self):
         d = self.desk
-        d.new("문서 정리", "--no-branch", "--slug", "docs")
+        d.new("문서 정리", "--slug", "docs")
         base = self.call("SessionStart startup", "session-start", {"source": "startup"})
         d.add_old_knowledge(1, ["src/**"])
         self.assertEqual(self.call("SessionStart startup (이전 버전의 지식 항목)", "session-start",
@@ -491,7 +511,7 @@ class InjectionTest(unittest.TestCase):
 
     def test_desk_file_edit(self):
         d = self.desk
-        tid = d.new("로그인 기능", "--branch", "feature/login")
+        tid = d.new("로그인 기능", "--slug", "login", "--branch", "feature/login")
         state = d.task_dir(tid) / "state.md"
         edit = {"tool_name": "Edit", "tool_input": {"file_path": str(state)}}
         self.call("PreToolUse Edit state.md (차단)", "pre-tool-use", edit)
@@ -509,7 +529,7 @@ class InjectionTest(unittest.TestCase):
 
     def test_old_schema(self):
         d = self.desk
-        d.new("문서 정리", "--no-branch", "--slug", "docs")
+        d.new("문서 정리", "--slug", "docs")
         base = self.call("SessionStart startup", "session-start", {"source": "startup"})
         (d.root / "desk.toml").write_text("schema_version = 1\n", encoding="utf-8")
         ctx = self.call("SessionStart startup (스키마 1)", "session-start", {"source": "startup"})
@@ -532,7 +552,7 @@ class IsolationTest(unittest.TestCase):
         base = Path(tempfile.mkdtemp(prefix="adesk-inject-")).resolve()
         self.addCleanup(remove_tree, base)
         d = Desk(base)
-        d.new("문서 정리", "--no-branch", "--slug", "docs")
+        d.new("문서 정리", "--slug", "docs")
         d.hook("session-start", {"source": "startup"})
         r = d.run([sys.executable, str(DESK_PY), "where"])
         where = json.loads(r.stdout)

@@ -5,8 +5,8 @@
 [agent-desk] 프로젝트 myapp · 브랜치 main · 포커스 없음
 
 --- 열린 태스크 ---
-- <YYMMDD>-docs (문서 정리) · in_progress · 브랜치 없음
-- <YYMMDD>-feature__login (로그인 기능) · in_progress · 브랜치 feature/login
+- <YYMMDD>-docs (문서 정리) · todo · 브랜치 없음
+- <YYMMDD>-login (로그인 기능) · todo · 브랜치 feature/login
 
 포커스는 사용자의 요청으로 정한다. 사용자의 요청이 이 중 하나를 분명히 가리키면 `adesk focus <id>` 로 포커스하고, 아니면 묻는다. 태스크와 무관한 세션이면 포커스하지 않고, 포커스 전에는 기록하지 않는다.
 태스크 생성·기록·과거 결정 조회는 agent-desk:desk 스킬을 따른다.
@@ -18,8 +18,8 @@
 [additionalContext UserPromptSubmit]
 [agent-desk] 작업 위치가 바뀌었다 (myapp · main → myapp · feature/login).
 [agent-desk] 프로젝트 myapp · 브랜치 feature/login · 포커스 <YYMMDD>-docs (문서 정리)
-이 브랜치의 태스크: <YYMMDD>-feature__login (로그인 기능) · in_progress · 브랜치 feature/login
-사용자의 일이 이 브랜치의 태스크로 바뀌었으면 `adesk focus <YYMMDD>-feature__login` 로 포커스를 옮길 것.
+이 브랜치의 태스크: <YYMMDD>-login (로그인 기능) · todo · 브랜치 feature/login
+사용자의 일이 이 브랜치의 태스크로 바뀌었으면 `adesk focus <YYMMDD>-login` 로 포커스를 옮길 것.
 태스크 생성·기록·과거 결정 조회는 agent-desk:desk 스킬을 따른다.
 
 === SessionStart resume (feature/login)
@@ -27,7 +27,7 @@
 [agent-desk] 프로젝트 myapp · 브랜치 feature/login · 포커스 <YYMMDD>-docs (in_progress)
 태스크 폴더: <TMP>/desk/projects/myapp/tasks/<YYMMDD>-docs
 다른 열린 태스크 1건: 필요할 때 `adesk list` 로 확인할 것.
-이 브랜치의 태스크는 <YYMMDD>-feature__login(로그인 기능)로, 포커스와 다르다. 사용자의 일이 그 태스크면 `adesk focus <YYMMDD>-feature__login` 로 포커스를 옮길 것.
+이 브랜치의 태스크는 <YYMMDD>-login(로그인 기능)로, 포커스와 다르다. 사용자의 일이 그 태스크면 `adesk focus <YYMMDD>-login` 로 포커스를 옮길 것.
 
 --- state.md ---
 ---

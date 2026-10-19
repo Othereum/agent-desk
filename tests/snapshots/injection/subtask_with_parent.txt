@@ -2,13 +2,13 @@
 
 === SessionStart resume (하위 태스크)
 [additionalContext SessionStart]
-[agent-desk] 프로젝트 myapp · 브랜치 feature/login · 포커스 <YYMMDD>-feature__login (in_progress)
-태스크 폴더: <TMP>/desk/projects/myapp/tasks/<YYMMDD>-feature__login
+[agent-desk] 프로젝트 myapp · 브랜치 feature/login · 포커스 <YYMMDD>-login (in_progress)
+태스크 폴더: <TMP>/desk/projects/myapp/tasks/<YYMMDD>-login
 다른 열린 태스크 2건: 필요할 때 `adesk list` 로 확인할 것.
 
 --- state.md ---
 ---
-id: <YYMMDD>-feature__login
+id: <YYMMDD>-login
 title: 로그인 기능
 status: in_progress
 project: myapp
@@ -31,7 +31,7 @@ verified: <DATE> <TIME>
 ---
 id: <YYMMDD>-v1
 title: 1.0 준비
-status: in_progress
+status: todo
 project: myapp
 branches: []
 links: []
