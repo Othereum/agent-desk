@@ -12,6 +12,8 @@ from pathlib import Path
 SCHEMA_VERSION = 2
 PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 TASK_FILES = ("state.md", "decisions.md", "log.md")
+FILES_DIR = "files"  # a task's attachments: evidence kept as given, the conclusions go in the task files
+FILE_SIZE_LIMIT = 10 * 1024 * 1024  # the data root may be a synced folder: a larger file needs --large
 OPEN_STATUSES = ("todo", "in_progress", "on_hold")
 CLOSED_STATUSES = ("done", "cancelled")
 # schema 1 names, read as the new ones until `adesk migrate` rewrites them
@@ -57,12 +59,15 @@ def retry_busy(action) -> None:
 
 
 def write_text(path: Path, text: str) -> None:
+    write_bytes(path, text.encode("utf-8"))
+
+
+def write_bytes(path: Path, data: bytes) -> None:
     # write then rename: parallel agents read and write the same data root, and a reader
     # must never see a half-written file (an unreadable state.md drops the task from lists)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    with tmp.open("w", encoding="utf-8", newline="\n") as f:
-        f.write(text)
+    tmp.write_bytes(data)
     try:
         retry_busy(lambda: os.replace(tmp, path))
     except PermissionError:

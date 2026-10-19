@@ -9,12 +9,13 @@ import sys
 from pathlib import Path
 
 from .core import (
-    DeskError, OPEN_STATUSES, PYTHON_ALIAS_MESSAGE, SCHEMA_VERSION, desk_root, python_alias, read_text, schema_version,
+    DeskError, FILES_DIR, OPEN_STATUSES, PYTHON_ALIAS_MESSAGE, SCHEMA_VERSION, desk_root, python_alias, read_text,
+    schema_version,
 )
 from .frontmatter import parse_frontmatter
 from .gitinfo import is_under, native_path, normalize_path, repo_info
 from .model import (
-    DECISION_LINE, Project, Task, get_session_task, get_task, head_branch, load_tasks,
+    DECISION_LINE, Project, Task, attachments, get_session_task, get_task, head_branch, load_tasks,
     match_project, safe_name, session_dir, session_tasks, strip_comments, stray_files, task_list_field, tasks_on_branch,
 )
 
@@ -122,6 +123,9 @@ def task_context(root: Path, project: Project, task: Task, branch: str | None, c
     related = task_list_field(task, "related")
     if related:
         parts += ["", f"연관 태스크: {', '.join(related)} (필요할 때 `adesk list --all` 로 위치를 찾아 읽을 것)"]
+    files = attachments(task)
+    if files:
+        parts += ["", f"첨부파일({FILES_DIR}/): {', '.join(p.name for p in files)}"]
     strays = stray_files(task)
     if strays:
         parts += ["", f"경고: 태스크 폴더에 예상하지 않은 파일이 있습니다(동기화 충돌 사본일 수 있음): {', '.join(strays)}. 사용자에게 알리고 병합 여부를 확인할 것."]
@@ -262,6 +266,8 @@ def tool_file_path(payload: dict) -> Path | None:
 
 DESK_EDIT_DENIED = ("[agent-desk] 데이터 폴더는 Edit/Write로 고치지 않는다. 파일을 scratchpad에 복사해 고친 뒤 "
                     "`adesk put <경로> --file <사본>`(전체 교체), 덧붙일 때는 `adesk append <경로> --file <파일>`로 반영할 것.")
+FILES_EDIT_DENIED = ("[agent-desk] 첨부파일은 Edit/Write로 쓰지 않는다. scratchpad에서 만들거나 고친 뒤 "
+                     "`adesk files <id> add <파일>`(있는 첨부파일을 바꿀 때는 `--replace`)로 반영할 것.")
 
 
 def pre_tool_use_decision(payload: dict) -> str | None:
@@ -272,7 +278,9 @@ def pre_tool_use_decision(payload: dict) -> str | None:
     if payload.get("tool_name") not in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
         return None
     path = tool_file_path(payload)
-    return DESK_EDIT_DENIED if path and is_under(desk_root(), path) else None
+    if not path or not is_under(desk_root(), path):
+        return None
+    return FILES_EDIT_DENIED if path.parent.name == FILES_DIR else DESK_EDIT_DENIED
 
 
 def post_tool_use_context(payload: dict) -> str | None:

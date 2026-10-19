@@ -10,14 +10,14 @@ import tomllib
 from pathlib import Path
 
 from .core import (
-    CLOSED_STATUSES, DEFAULT_SHARED_BRANCHES, DeskError, LEGACY_STATUSES, OPEN_STATUSES,
+    CLOSED_STATUSES, DEFAULT_SHARED_BRANCHES, DeskError, FILE_SIZE_LIMIT, FILES_DIR, LEGACY_STATUSES, OPEN_STATUSES,
     PYTHON_ALIAS_MESSAGE, SCHEMA_VERSION, TASK_FILES, desk_root, ensure_root, now_minute, python_alias,
-    move_dir, read_text, root_lock, schema_version, today, write_schema_version, write_text,
+    move_dir, read_text, retry_busy, root_lock, schema_version, today, write_bytes, write_schema_version, write_text,
 )
 from .frontmatter import format_scalar, format_value, parse_frontmatter, split_frontmatter, update_frontmatter
 from .gitinfo import RepoInfo, is_under, native_path, normalize_path, repo_info
 from .model import (
-    Project, TRASH_DIR, TRASH_LOG_LINE, append_log, build_id, check_branch_linkable, children_of, current_project,
+    Project, TRASH_DIR, TRASH_LOG_LINE, append_log, attachments, build_id, check_branch_linkable, children_of, current_project,
     decision_problems, env_session_id, find_trashed, get_project, get_session_task, get_task,
     load_projects, load_tasks, load_trash, main_worktree, match_project, projects_dir, render_template,
     resolve_parent, set_meta, set_session_task, task_dir_of, task_list_field, tasks_on_branch, touch_task, trashed_at,
@@ -397,6 +397,9 @@ def desk_target(root: Path, raw: str, cwd: Path) -> Path:
     path = path.resolve()  # the file's own spelling: what is checked depends on the name (STATE.MD is state.md)
     if path.name == "index.md":
         raise DeskError("index.md 는 자동 생성 파일입니다. `adesk index` 로 다시 만드세요")
+    if path.parent.name == FILES_DIR and (path.parent.parent / "state.md").is_file():
+        raise DeskError(f"첨부파일은 put·append로 쓰지 않습니다. 고친 파일을 "
+                        f"`adesk files {path.parent.parent.name} add <파일> --replace` 로 바꾸세요")
     return path
 
 
@@ -581,6 +584,74 @@ def cmd_set(args) -> None:
          "links": task_list_field(task, "links"), "changed": bool(updates)})
 
 
+FILE_REMOVE_ACTIONS = ("rm", "remove", "delete")
+
+
+def cmd_files(args) -> None:
+    """A task's attachments (files/): list, add (refused over an existing one unless --replace), rm."""
+    root = ensure_root() if args.action else desk_root()
+    project, _ = current_project(root, Path(args.cwd), args.project)
+    task = get_task(project, args.id)
+    fdir = task.dir / FILES_DIR
+    if args.action in (None, "list", "ls"):
+        if args.names:
+            raise DeskError("목록에는 파일 이름을 지정하지 않습니다. 추가는 `add`, 삭제는 `rm`")
+        out({"task": task.id, "dir": fdir.as_posix(),
+             "files": [{"name": p.name, "size": p.stat().st_size} for p in attachments(task)]})
+        return
+    if not args.names:
+        raise DeskError(f"{'첨부할 파일' if args.action == 'add' else '지울 첨부파일 이름'}을 지정하세요")
+    if args.action == "add":
+        add_attachments(task, fdir, args)
+    else:
+        remove_attachments(task, fdir, args)
+    write_index(project)
+
+
+def add_attachments(task, fdir: Path, args) -> None:
+    sources, seen = [], set()
+    for raw in args.names:
+        src = Path(native_path(raw)).expanduser()
+        if not src.is_file():
+            raise DeskError(f"파일이 아닙니다: {raw}")
+        if src.name.casefold() in seen:
+            raise DeskError(f"같은 이름의 파일을 한 번에 첨부할 수 없습니다: {src.name}")
+        seen.add(src.name.casefold())
+        sources.append(src)
+    # every check before the first write: a refused add leaves the attachments as they were
+    large = [f"{s.name} ({s.stat().st_size / 1024 / 1024:.1f}MB)" for s in sources if s.stat().st_size > FILE_SIZE_LIMIT]
+    if large and not args.large:
+        raise DeskError(f"{FILE_SIZE_LIMIT // 1024 // 1024}MB를 넘는 파일입니다: {', '.join(large)}. 데이터 폴더가 동기화될 수 있으니 "
+                        "사용자에게 확인한 뒤 --large 로 다시 실행하세요")
+    existing = [s.name for s in sources if (fdir / s.name).exists()]
+    if existing and not args.replace:
+        raise DeskError(f"같은 이름의 첨부파일이 이미 있습니다: {', '.join(existing)}. 바꾸려면 --replace")
+    for s in sources:
+        try:
+            data = s.read_bytes()
+        except OSError as e:
+            raise DeskError(f"파일을 읽을 수 없습니다: {s} ({e.strerror or e})")
+        write_bytes(fdir / s.name, data)  # as given: no BOM or line ending clean-up
+    added = [s.name for s in sources if s.name not in existing]
+    append_log(task, [f"첨부파일 추가: {n}" for n in added] + [f"첨부파일 교체: {n}" for n in existing])
+    touch_task(task.dir)
+    out({"task": task.id, "dir": fdir.as_posix(), "added": added, "replaced": existing})
+
+
+def remove_attachments(task, fdir: Path, args) -> None:
+    names = [Path(native_path(n)).name for n in args.names]  # a path to the attachment works as its name
+    missing = [n for n in names if not (fdir / n).is_file()]
+    if missing:
+        raise DeskError(f"없는 첨부파일입니다: {', '.join(missing)}. 목록은 `adesk files {task.id}`")
+    for n in names:
+        retry_busy((fdir / n).unlink)
+    if not any(fdir.iterdir()):
+        fdir.rmdir()
+    append_log(task, [f"첨부파일 삭제: {n}" for n in names])
+    touch_task(task.dir)
+    out({"task": task.id, "removed": names})
+
+
 def cmd_doctor(args) -> None:
     root = ensure_root()
     project, _ = try_project(root, args)
@@ -619,6 +690,8 @@ def changes_data(args) -> bool:
     name = args.cmd
     if name == "doctor":
         return args.apply  # without --apply it only reads
+    if name == "files":
+        return args.action not in (None, "list", "ls")
     return name not in READ_ONLY_COMMANDS
 
 
@@ -709,6 +782,16 @@ def run(argv: list[str]) -> int:
                        (("--parent", "--related"), "`adesk relate <id> --parent/--add/--remove`")):
         p.add_argument(*opts, nargs="?", action=refuse_option(hint), help=argparse.SUPPRESS)
 
+    p = sub.add_parser("files", help="태스크 첨부파일(files/) 목록·추가·삭제",
+                       description="첨부파일은 받은 그대로 저장하고, 고친 첨부파일은 add --replace 로 바꾼다.")
+    p.add_argument("id")
+    p.add_argument("action", nargs="?", choices=("list", "ls", "add", *FILE_REMOVE_ACTIONS),
+                   help="생략하면 목록. add: 파일 첨부, rm: 첨부파일 삭제(되살릴 수 없음)")
+    p.add_argument("names", nargs="*", help="add: 첨부할 파일 경로, rm: 지울 첨부파일 이름")
+    p.add_argument("--replace", action="store_true", help="add: 같은 이름의 첨부파일을 바꾼다")
+    p.add_argument("--large", action="store_true",
+                   help=f"add: {FILE_SIZE_LIMIT // 1024 // 1024}MB를 넘는 파일도 첨부한다 (사용자 확인 뒤)")
+
     for name, help_text in (("put", "데이터 폴더 파일을 --file 내용으로 교체 (frontmatter는 현재 값 유지)"),
                             ("append", "데이터 폴더 파일 끝에 --file 내용을 덧붙임")):
         p = sub.add_parser(name, help=help_text)
@@ -735,7 +818,7 @@ def run(argv: list[str]) -> int:
     handlers = {
         "where": cmd_where, "project-init": cmd_project_init, "new": cmd_new, "set": cmd_set,
         "link": cmd_link, "unlink": cmd_unlink, "relate": cmd_relate, "focus": cmd_focus, "status": cmd_status, "migrate": cmd_migrate, "close": cmd_close, "reopen": cmd_reopen,
-        "delete": cmd_delete, "restore": cmd_restore, "list": cmd_list, "index": cmd_index,
+        "delete": cmd_delete, "restore": cmd_restore, "list": cmd_list, "index": cmd_index, "files": cmd_files,
         "put": lambda a: write_desk_file(a, append=False), "append": lambda a: write_desk_file(a, append=True), "hook": lambda a: cmd_hook(a.event), "doctor": cmd_doctor,
     }
     handler = handlers[args.cmd]

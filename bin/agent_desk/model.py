@@ -10,7 +10,7 @@ import tomllib
 from pathlib import Path
 
 from .core import (
-    DEFAULT_SHARED_BRANCHES, DeskError, LEGACY_STATUSES, OPEN_STATUSES, PLUGIN_ROOT, TASK_FILES,
+    DEFAULT_SHARED_BRANCHES, DeskError, FILES_DIR, LEGACY_STATUSES, OPEN_STATUSES, PLUGIN_ROOT, TASK_FILES,
     is_write_temp, now_minute, read_text, today, write_text,
 )
 from .frontmatter import parse_frontmatter, update_frontmatter
@@ -394,5 +394,16 @@ def get_session_task(project: Project, session_id: str | None) -> Task | None:
 
 
 def stray_files(task: Task) -> list[str]:
-    return sorted(p.name for p in task.dir.iterdir()
-                  if p.is_file() and p.name not in TASK_FILES and not is_write_temp(p.name))
+    """What the task folder holds besides its files and the attachments folder (a folder ends with /)."""
+    return sorted(p.name + "/" if p.is_dir() else p.name for p in task.dir.iterdir()
+                  if not (p.is_file() and (p.name in TASK_FILES or is_write_temp(p.name)))
+                  and not (p.is_dir() and p.name == FILES_DIR))
+
+
+def attachments(task: Task) -> list[Path]:
+    """The files in the task's attachments folder (`adesk files`)."""
+    d = task.dir / FILES_DIR
+    if not d.is_dir():
+        return []
+    return sorted((p for p in d.iterdir() if p.is_file() and not is_write_temp(p.name)),
+                  key=lambda p: p.name.casefold())

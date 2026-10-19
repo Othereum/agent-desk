@@ -22,6 +22,7 @@ description: agent-desk 데스크(태스크별 현황 state·결정 decisions·�
 | 태스크 상태 | 예정 `todo`(만들어 두고 착수 전), 진행 중 `in_progress`, 보류 `on_hold`(착수했다가 멈춤·기다림), 완료 `done`, 취소 `cancelled`(이루지 않고 종료). 앞의 셋이 **열린 태스크**, 뒤의 둘이 **종료된 태스크**(아카이브) |
 | 결정 | decisions.md의 항목(D번호) |
 | 로그 | log.md |
+| 첨부파일 | 태스크 폴더의 `files/`에 붙여 둔 파일 |
 | 상위·하위·연관 태스크 | parent, 그 아래 태스크, related |
 | 브랜치 연결 | 이 태스크의 작업(코드 변경)이 그 브랜치에서 이루어진다는 기록. 그 브랜치에서는 이 태스크가 기본 후보가 된다. 한 브랜치에 여러 태스크, 한 태스크에 여러 브랜치를 연결할 수 있다. 공용 브랜치는 연결하지 않는다 |
 | 포커스 | 이 세션이 작업하는 태스크. 사용자의 요청으로 정한다(`adesk focus`). 세션마다 따로 있고 다른 세션·PC와 공유하지 않는다. 기록은 포커스 태스크에 한다 |
@@ -52,6 +53,11 @@ adesk new --title "제목" --slug x --parent <id> [--related a,b]   # 상위·�
 # 기록 쓰기
 adesk put <데스크 파일> --file <파일|-> [--verified]   # 본문 교체 (frontmatter는 현재 값 유지)
 adesk append <데스크 파일> --file <파일|->   # 끝에 덧붙이기
+
+# 첨부파일 (files/, 아래 "첨부파일")
+adesk files <id>                        # 첨부파일 목록
+adesk files <id> add <파일...> [--replace] [--large]   # 첨부 (같은 이름은 --replace로 교체)
+adesk files <id> rm <이름...>           # 첨부파일 삭제 (되살릴 수 없음, 사용자가 요청할 때만)
 
 # 속성·관계 (frontmatter)
 adesk set <id> [--title "제목"] [--design-doc URL] [--add-link URL] [--remove-link URL]
@@ -86,6 +92,7 @@ ID 생성, 브랜치 연결, 상태 전환, 아카이브·휴지통 이동은 �
 <root>/projects/<KEY>/tasks/<id>/state.md       # 현황: 덮어씀
 <root>/projects/<KEY>/tasks/<id>/decisions.md   # 결정: 항목 추가
 <root>/projects/<KEY>/tasks/<id>/log.md         # 로그: 덧붙이기만
+<root>/projects/<KEY>/tasks/<id>/files/         # 첨부파일: adesk files로만
 <root>/projects/<KEY>/archive/<id>/...    # 종료된 태스크
 <root>/projects/<KEY>/trash/<id>/...      # 휴지통 (목록·주입·브랜치 매칭에서 빠짐)
 ```
@@ -125,9 +132,9 @@ ID 생성, 브랜치 연결, 상태 전환, 아카이브·휴지통 이동은 �
 데스크 파일은 Edit/Write 도구로 고치지 않는다(hook이 거부한다). rewind(Restore code)는 Edit/Write로 바꾼 것만 되돌리고 CLI로 바꾼 것은 남겨서, 섞어 쓰면 데스크가 어긋난다. 내용은 scratchpad(없으면 작업 디렉터리 밖 임시 폴더)에서 만들고 CLI로 반영한다. sed 등으로 직접 고치지 않는다(조용히 실패할 수 있다).
 - 고치기(state.md, decisions.md의 기존 항목): 데스크 파일을 scratchpad에 `cp`로 복사하고, 사본을 Read·Edit한 뒤 `adesk put <데스크 파일> --file <사본>`. put은 frontmatter 전체를 현재 파일 값으로 유지하므로(사본에는 본문만 있어도 된다) 사본의 frontmatter를 고쳐도 반영되지 않는다. 사본과 달랐던 키는 출력의 `kept`로 알린다.
 - 덧붙이기(log.md 항목, decisions.md의 새 결정): 덧붙일 부분만 scratchpad 파일에 Write하고 `adesk append <데스크 파일> --file <파일>`. 짧으면 `--file -`와 heredoc으로 표준 입력에 넘겨도 된다.
-- 데스크 파일 경로는 절대 경로나 데이터 폴더 기준 상대 경로(`projects/<KEY>/tasks/<id>/state.md`)로 쓴다. 새 파일은 만들지 않는다(태스크 파일은 `new`가 만든다).
+- 데스크 파일 경로는 절대 경로나 데이터 폴더 기준 상대 경로(`projects/<KEY>/tasks/<id>/state.md`)로 쓴다. 새 파일은 만들지 않는다(태스크 파일은 `new`가, 첨부파일은 `files add`가 만든다).
 
-모든 파일은 UTF-8(BOM 없음), LF로 저장한다(put·append가 BOM과 CRLF를 정리한다).
+기록 파일은 UTF-8(BOM 없음), LF로 저장한다(put·append가 BOM과 CRLF를 정리한다). 첨부파일은 받은 그대로 저장한다.
 
 CLI 인자로 넘기는 값은 CLI가 따옴표를 붙여 쓰니 그대로 넘긴다. 쉼표로 구분하는 목록(`--related`, `relate --add`·`--remove`)의 항목에는 쉼표를 넣을 수 없다. 현재 파일의 frontmatter를 읽을 수 없을 때만 put이 사본의 frontmatter를 쓴다(고치는 경우). 이때는 맨 앞 열의 `key: 값`과 한 줄 목록(`[a, "b, c"]`)으로 쓰고, `#`나 `: `가 들어간 값은 따옴표로 감싼다.
 
@@ -147,6 +154,12 @@ CLI 인자로 넘기는 값은 CLI가 따옴표를 붙여 쓰니 그대로 넘�
 ### log.md (히스토리, 덧붙이기만)
 - `## YYYY-MM-DD HH:MM` 아래에 짧은 bullet로 적는다. 기존 항목은 수정하지 않는다. 시각은 짐작하지 말고 `date`로 확인해서 쓴다.
 - 무엇을 했는지보다 **무엇을 알아냈는지**(원인, 확인한 사실, 막힌 지점)를 중심으로 쓴다.
+
+### 첨부파일 (files/)
+- 첨부파일의 내용은 주입되지 않고 이름만 표시된다.
+- scratchpad에서 만들어 `adesk files <id> add`로 첨부한다. 무엇인지 드러나는 이름을 붙인다. 고칠 때도 scratchpad에서 고쳐 `add --replace`로 바꾼다(put·append, Edit/Write는 쓰지 않는다).
+- 10MB를 넘는 파일은 거부된다. 데이터 폴더가 동기화될 수 있으니 사용자에게 확인한 뒤에만 `--large`로 첨부한다.
+- 삭제(`rm`)는 휴지통 없이 바로 지운다. 사용자가 요청할 때만 하고, 지운 첨부파일을 가리키던 문장도 고친다.
 
 ## 갱신 시점
 
