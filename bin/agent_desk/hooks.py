@@ -146,11 +146,12 @@ def broken_task_lines(project: Project) -> list[str]:
 
 def task_records(project: Project, task: Task, focused: bool = False) -> list[str]:
     """The task's records without directions for the session: what `adesk show` prints, and what
-    the focus context wraps (focused: add how the session follows the parent task)."""
+    the focus context wraps (focused: add the parent task's records and how the session follows
+    them; a read names the parent only, so reading both tasks does not print it twice)."""
     titles = decision_titles(task)
     parts = ["", "--- state.md ---", read_text(task.state_path).rstrip(),
              "", "--- 결정 목록 (본문은 decisions.md) ---"] + ([f"- {t}" for t in titles] or ["(없음)"])
-    parts += parent_context(project, task, focused)
+    parts += parent_context(project, task) if focused else parent_line(project, task)
     files = attachments(task)
     if files:
         parts += ["", f"첨부파일({FILES_DIR}/): {', '.join(p.name for p in files)}"]
@@ -160,7 +161,18 @@ def task_records(project: Project, task: Task, focused: bool = False) -> list[st
     return parts
 
 
-def parent_context(project: Project, task: Task, focused: bool = False) -> list[str]:
+def parent_line(project: Project, task: Task) -> list[str]:
+    parent_id = task.meta.get("parent")
+    if not parent_id:
+        return []
+    try:
+        title = f" ({get_task(project, parent_id).meta.get('title', '')})"
+    except DeskError:
+        title = ""
+    return ["", f"상위 태스크: {parent_id}{title} · 기록은 `adesk show {parent_id}`"]
+
+
+def parent_context(project: Project, task: Task) -> list[str]:
     parent_id = task.meta.get("parent")
     if not parent_id:
         return []
@@ -173,8 +185,8 @@ def parent_context(project: Project, task: Task, focused: bool = False) -> list[
              read_text(parent.state_path).rstrip(),
              "", "--- 상위 태스크 결정 목록 (본문은 상위 태스크의 decisions.md) ---"] +
             ([f"- {t}" for t in titles] or ["(없음)"]) +
-            (["상위 태스크는 흐름 전체의 맥락이다. 이 세션의 할 일은 하위 태스크 state.md를 따르고, 상위 태스크의 유효한 결정을 따른다. "
-              "어긋나는 결정이 필요하면 사용자에게 확인하고 상위 태스크의 decisions.md에 기록할 것."] if focused else []))
+            ["상위 태스크는 흐름 전체의 맥락이다. 이 세션의 할 일은 하위 태스크 state.md를 따르고, 상위 태스크의 유효한 결정을 따른다. "
+             "어긋나는 결정이 필요하면 사용자에게 확인하고 상위 태스크의 decisions.md에 기록할 것."])
 
 
 # Per-session cache for the hooks (session_dir in model): the location and the session's task

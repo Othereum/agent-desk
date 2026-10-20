@@ -61,8 +61,9 @@ class Show(unittest.TestCase):
         self.assertIn(f"태스크 {self.tid} (todo, 열린 태스크) · 읽기 전용", text)
         self.assertIn("--- state.md ---", text)
         self.assertIn("--- 결정 목록 (본문은 decisions.md) ---", text)
-        self.assertIn(f"--- 상위 태스크 {self.parent} state.md", text)
-        self.assertNotIn("이 세션의 할 일", text)  # directions belong to the focus, not to a read
+        # the parent is named, not printed: an agent reading both tasks would get it twice
+        self.assertIn(f"상위 태스크: {self.parent} (흐름) · 기록은 `adesk show {self.parent}`", text)
+        self.assertNotIn("--- 상위 태스크", text)
         self.assertNotIn("포커스 ", text.splitlines()[0].split("·")[1])
         task = self.task(self.tid)
         self.assertEqual(task.status, "todo")
