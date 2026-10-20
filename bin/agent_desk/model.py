@@ -239,12 +239,19 @@ def render_template(lang: str, name: str, values: dict) -> str:
 
 
 def append_log(task: Task, lines: list[str]) -> None:
+    append_log_entry(task, "".join(f"- {l}\n" for l in lines))
+
+
+def append_log_entry(task: Task, body: str) -> str:
+    """Add an entry under a heading with the current time (the agent cannot know it); returns that time."""
     path = task.dir / "log.md"
     text = read_text(path) if path.exists() else ""
     if text and not text.endswith("\n"):
         text += "\n"
-    text += f"\n## {now_minute()}\n" + "".join(f"- {l}\n" for l in lines)
+    stamp = now_minute()
+    text += f"\n## {stamp}\n" + body
     write_text(path, text)
+    return stamp
 
 
 def set_meta(task: Task, updates: dict) -> None:

@@ -17,7 +17,7 @@ from .core import (
 from .frontmatter import format_scalar, format_value, parse_frontmatter, split_frontmatter, update_frontmatter
 from .gitinfo import RepoInfo, is_under, native_path, normalize_path, repo_info
 from .model import (
-    Project, TRASH_DIR, TRASH_LOG_LINE, append_log, attachments, build_id, check_branch_linkable, children_of, current_project,
+    Project, TRASH_DIR, TRASH_LOG_LINE, append_log, append_log_entry, attachments, build_id, check_branch_linkable, children_of, current_project,
     decision_problems, env_session_id, find_trashed, get_project, get_session_task, get_task,
     load_projects, load_tasks, load_trash, main_worktree, match_project, projects_dir, render_template,
     resolve_parent, set_meta, set_session_task, task_dir_of, task_list_field, tasks_on_branch, touch_task, trashed_at,
@@ -540,6 +540,8 @@ def write_desk_file(args, append: bool) -> None:
         text = update_frontmatter(content, auto) if auto else content
     if path.name == "decisions.md":
         warnings += decision_problems(text)
+    if append and path.name == "log.md" and task_dir_of(path):
+        warnings.append("log.md 항목은 `adesk log <id> --file <파일|->` 로 덧붙이세요. 시각 제목을 CLI가 현재 시각으로 붙입니다")
     write_text(path, text)
     task_dir = task_dir_of(path)
     if task_dir and kind != "state" and not touch_task(task_dir):
@@ -547,6 +549,27 @@ def write_desk_file(args, append: bool) -> None:
     refresh_indexes(root, path)
     out({"file": path.as_posix(), "action": "append" if append else "put", "lines": text.count("\n"),
          **({"kept": kept, "note": KEPT_NOTE} if kept else {}), **{k: auto[k] for k in ("verified",) if k in auto},
+         **({"warnings": warnings} if warnings else {})})
+
+
+LOG_HEADING = re.compile(r"^#{1,6}\s*\d{4}-\d{2}-\d{2}(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?\s*$")
+
+
+def cmd_log(args) -> None:
+    """Add a log entry; the CLI writes the time heading. A time heading the agent wrote out of habit is dropped."""
+    root = ensure_root()
+    project, _ = current_project(root, Path(args.cwd), args.project)
+    task = get_task(project, args.id)
+    lines = read_content(args.file).splitlines(keepends=True)
+    kept = [l for l in lines if not LOG_HEADING.match(l)]
+    body = "".join(kept).strip("\n")
+    if not body.strip():
+        raise DeskError("쓸 내용이 비어 있습니다. 시각 제목은 CLI가 붙이니 본문만 넘기세요")
+    stamp = append_log_entry(task, body + "\n")
+    warnings = [] if touch_task(task.dir) else ["state.md 의 frontmatter를 읽을 수 없어 updated 를 갱신하지 못했습니다"]
+    write_index(project)
+    out({"task": task.id, "file": (task.dir / "log.md").as_posix(), "time": stamp,
+         **({"note": "시각 제목은 CLI가 붙이므로 넘긴 시각 제목은 뺐습니다"} if len(kept) != len(lines) else {}),
          **({"warnings": warnings} if warnings else {})})
 
 
@@ -793,6 +816,10 @@ def run(argv: list[str]) -> int:
     p.add_argument("--large", action="store_true",
                    help=f"add: {FILE_SIZE_LIMIT // 1024 // 1024}MB를 넘는 파일도 첨부한다 (사용자 확인 뒤)")
 
+    p = sub.add_parser("log", help="태스크 log.md에 항목 추가 (시각 제목은 CLI가 붙임)")
+    p.add_argument("id")
+    p.add_argument("--file", "-f", required=True, help="항목 본문(bullet)이 든 파일 (- 이면 표준 입력)")
+
     for name, help_text in (("put", "데이터 폴더 파일을 --file 내용으로 교체 (frontmatter는 현재 값 유지)"),
                             ("append", "데이터 폴더 파일 끝에 --file 내용을 덧붙임")):
         p = sub.add_parser(name, help=help_text)
@@ -821,7 +848,7 @@ def run(argv: list[str]) -> int:
     handlers = {
         "where": cmd_where, "project-init": cmd_project_init, "new": cmd_new, "set": cmd_set,
         "link": cmd_link, "unlink": cmd_unlink, "focus": cmd_focus, "show": cmd_show, "status": cmd_status, "migrate": cmd_migrate, "close": cmd_close, "reopen": cmd_reopen,
-        "delete": cmd_delete, "restore": cmd_restore, "list": cmd_list, "index": cmd_index, "files": cmd_files,
+        "delete": cmd_delete, "restore": cmd_restore, "list": cmd_list, "index": cmd_index, "files": cmd_files, "log": cmd_log,
         "put": lambda a: write_desk_file(a, append=False), "append": lambda a: write_desk_file(a, append=True), "hook": lambda a: cmd_hook(a.event), "doctor": cmd_doctor,
     }
     handler = handlers[args.cmd]

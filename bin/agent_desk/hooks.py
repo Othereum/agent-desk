@@ -264,7 +264,7 @@ def tool_file_path(payload: dict) -> Path | None:
 
 
 DESK_EDIT_DENIED = ("[agent-desk] 데이터 폴더는 Edit/Write로 고치지 않는다. 파일을 scratchpad에 복사해 고친 뒤 "
-                    "`adesk put <경로> --file <사본>`(전체 교체), 덧붙일 때는 `adesk append <경로> --file <파일>`로 반영할 것.")
+                    "`adesk put <경로> --file <사본>`(전체 교체), 덧붙일 때는 `adesk append <경로> --file <파일>`(log.md는 `adesk log <id> --file <파일>`)로 반영할 것.")
 FILES_EDIT_DENIED = ("[agent-desk] 첨부파일은 Edit/Write로 쓰지 않는다. scratchpad에서 만들거나 고친 뒤 "
                      "`adesk files <id> add <파일>`(있는 첨부파일을 바꿀 때는 `--replace`)로 반영할 것.")
 

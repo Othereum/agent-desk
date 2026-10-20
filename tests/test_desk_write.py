@@ -199,7 +199,7 @@ class TaskUpdated(DeskFixture):
         self.state.write_text("---\nid: t1\n  bad: y\n---\n", encoding="utf-8", newline="\n")
         r = self.run_desk("append", str(self.log), "--file", self.scratch_file("- a\n"))
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("updated", json.loads(r.stdout)["warnings"][0])
+        self.assertTrue(any("updated" in w for w in json.loads(r.stdout)["warnings"]))
 
 
 class Append(DeskFixture):
@@ -220,6 +220,39 @@ class Append(DeskFixture):
         r = self.run_desk("append", str(self.state), "--file", self.scratch_file("x\n"))
         self.assertEqual(r.returncode, 1)
         self.assertEqual(self.state.read_text(encoding="utf-8"), "---\nid: t1\n")
+
+    def test_log_append_points_to_log_command(self):
+        r = self.run_desk("append", str(self.log), "--file", self.scratch_file("## 2026-10-18 01:00\n- a\n"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("adesk log", json.loads(r.stdout)["warnings"][0])
+
+
+class Log(DeskFixture):
+    def log_entry(self, text: str):
+        return self.run_desk("--project", "p", "log", "t1", "--file", "-", stdin=text)
+
+    def test_cli_writes_time_heading(self):
+        r = self.log_entry("- 알아낸 것\n- 원인")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = json.loads(r.stdout)
+        self.assertNotIn("note", out)
+        self.assertEqual(self.log.read_text(encoding="utf-8"),
+                         f"# 태스크 로그\n\n## 2026-10-18 00:00\n- 태스크 생성\n\n## {out['time']}\n- 알아낸 것\n- 원인\n")
+        self.assertTrue(out["time"].startswith(TODAY))
+        self.assertIn(f"updated: {TODAY}", self.state.read_text(encoding="utf-8"))
+
+    def test_guessed_time_heading_is_replaced(self):
+        r = self.log_entry("## 2026-10-18 09:99\n\n- a\n")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = json.loads(r.stdout)
+        self.assertIn("note", out)
+        self.assertNotIn("09:99", self.log.read_text(encoding="utf-8"))
+        self.assertTrue(self.log.read_text(encoding="utf-8").endswith(f"## {out['time']}\n- a\n"))
+
+    def test_heading_only_is_refused(self):
+        r = self.log_entry("## 2026-10-18 01:00\n")
+        self.assertEqual(r.returncode, 1)
+        self.assertNotIn("01:00", self.log.read_text(encoding="utf-8"))
 
 
 class PreToolUseHook(DeskFixture):

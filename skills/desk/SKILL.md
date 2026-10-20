@@ -53,7 +53,8 @@ adesk new --title "제목" --slug x --parent <id>   # 상위 태스크 지정
 
 # 기록 쓰기
 adesk put <데스크 파일> --file <파일|-> [--verified]   # 본문 교체 (frontmatter는 현재 값 유지)
-adesk append <데스크 파일> --file <파일|->   # 끝에 덧붙이기
+adesk append <데스크 파일> --file <파일|->   # 끝에 덧붙이기 (decisions.md의 새 결정)
+adesk log <id> --file <파일|->          # log.md에 항목 추가 (시각 제목은 CLI가 붙인다)
 
 # 첨부파일 (files/, 아래 "첨부파일")
 adesk files <id>                        # 첨부파일 목록
@@ -131,7 +132,8 @@ ID 생성, 브랜치 연결, 상태 전환, 아카이브·휴지통 이동은 �
 
 데스크 파일은 Edit/Write 도구로 고치지 않는다(hook이 거부한다). rewind(Restore code)는 Edit/Write로 바꾼 것만 되돌리고 CLI로 바꾼 것은 남겨서, 섞어 쓰면 데스크가 어긋난다. 내용은 scratchpad(없으면 작업 디렉터리 밖 임시 폴더)에서 만들고 CLI로 반영한다. sed 등으로 직접 고치지 않는다(조용히 실패할 수 있다).
 - 고치기(state.md, decisions.md의 기존 항목): 데스크 파일을 scratchpad에 `cp`로 복사하고, 사본을 Read·Edit한 뒤 `adesk put <데스크 파일> --file <사본>`. put은 frontmatter 전체를 현재 파일 값으로 유지하므로(사본에는 본문만 있어도 된다) 사본의 frontmatter를 고쳐도 반영되지 않는다. 사본과 달랐던 키는 출력의 `kept`로 알린다.
-- 덧붙이기(log.md 항목, decisions.md의 새 결정): 덧붙일 부분만 scratchpad 파일에 Write하고 `adesk append <데스크 파일> --file <파일>`. 짧으면 `--file -`와 heredoc으로 표준 입력에 넘겨도 된다.
+- 덧붙이기(decisions.md의 새 결정): 덧붙일 부분만 scratchpad 파일에 Write하고 `adesk append <데스크 파일> --file <파일>`. 짧으면 `--file -`와 heredoc으로 표준 입력에 넘겨도 된다.
+- 로그 항목(log.md): bullet 본문만 `adesk log <id> --file <파일|->`로 넘긴다. `## YYYY-MM-DD HH:MM` 제목은 CLI가 현재 시각으로 붙인다.
 - 데스크 파일 경로는 절대 경로나 데이터 폴더 기준 상대 경로(`projects/<KEY>/tasks/<id>/state.md`)로 쓴다. 새 파일은 만들지 않는다(태스크 파일은 `new`가, 첨부파일은 `files add`가 만든다).
 
 기록 파일은 UTF-8(BOM 없음), LF로 저장한다(put·append가 BOM과 CRLF를 정리한다). 첨부파일은 받은 그대로 저장한다.
@@ -153,7 +155,7 @@ CLI 인자로 넘기는 값은 CLI가 따옴표를 붙여 쓰니 그대로 넘�
 - 기각한 대안과 그 이유를 꼭 남긴다. 같은 논의를 반복하지 않게 하는 핵심 정보다.
 
 ### log.md (히스토리, 덧붙이기만)
-- `## YYYY-MM-DD HH:MM` 아래에 짧은 bullet로 적는다. 기존 항목은 수정하지 않는다. 시각은 짐작하지 말고 `date`로 확인해서 쓴다.
+- `adesk log`로 짧은 bullet을 넘기면 CLI가 `## YYYY-MM-DD HH:MM` 제목 아래에 덧붙인다. 기존 항목은 수정하지 않는다.
 - 무엇을 했는지보다 **무엇을 알아냈는지**(원인, 확인한 사실, 막힌 지점)를 중심으로 쓴다.
 
 ### 첨부파일 (files/)

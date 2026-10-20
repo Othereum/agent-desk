@@ -2,7 +2,7 @@
 
 === PreToolUse Edit state.md (차단)
 [deny PreToolUse]
-[agent-desk] 데이터 폴더는 Edit/Write로 고치지 않는다. 파일을 scratchpad에 복사해 고친 뒤 `adesk put <경로> --file <사본>`(전체 교체), 덧붙일 때는 `adesk append <경로> --file <파일>`로 반영할 것.
+[agent-desk] 데이터 폴더는 Edit/Write로 고치지 않는다. 파일을 scratchpad에 복사해 고친 뒤 `adesk put <경로> --file <사본>`(전체 교체), 덧붙일 때는 `adesk append <경로> --file <파일>`(log.md는 `adesk log <id> --file <파일>`)로 반영할 것.
 
 === PreToolUse Read state.md
 (출력 없음)
