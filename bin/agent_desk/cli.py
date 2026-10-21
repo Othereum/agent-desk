@@ -18,7 +18,7 @@ from .frontmatter import format_scalar, format_value, parse_frontmatter, split_f
 from .gitinfo import RepoInfo, is_under, native_path, normalize_path, repo_info
 from .model import (
     Project, TRASH_DIR, TRASH_LOG_LINE, append_log, append_log_entry, attachments, build_id, check_branch_linkable, children_of, current_project,
-    decision_problems, env_session_id, find_trashed, get_project, get_session_task, get_task,
+    decision_numbers, decision_problems, env_session_id, find_trashed, get_project, get_session_task, get_task,
     load_projects, load_tasks, load_trash, main_worktree, match_project, projects_dir, render_template,
     resolve_parent, set_meta, set_session_task, task_dir_of, task_list_field, tasks_on_branch, touch_task, trashed_at,
 )
@@ -525,6 +525,13 @@ def write_desk_file(args, append: bool) -> None:
         old = read_text(path)
         if old and not old.endswith("\n"):
             old += "\n"
+        if path.name == "decisions.md":
+            taken = set(decision_numbers(old))
+            clash = [n for n in decision_numbers(content) if n in taken]
+            if clash:
+                # another session added a decision since this one read the list
+                raise DeskError(f"결정 번호가 이미 있습니다: {', '.join(f'D{n}' for n in clash)}. 쓰지 않았습니다. "
+                                f"다음 번호는 D{max(taken) + 1} 입니다. 번호를 고쳐 다시 덧붙이세요")
         if old.strip() and content.startswith("#") and not old.endswith("\n\n"):
             old += "\n"  # a new heading starts after a blank line, as `append_log` writes it
         text = old + content

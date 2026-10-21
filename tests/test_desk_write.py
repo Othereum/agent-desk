@@ -408,9 +408,18 @@ class DecisionHeadings(DeskFixture):
         self.assertEqual(len(warnings), 1)
         self.assertIn("빠졌습니다: D2", warnings[0])
 
-    def test_duplicate(self):
+    def test_taken_number_is_refused(self):
         self.append("## D1. a  (2026-10-18, 유효)\n")
-        warnings = self.append("## D1. b  (2026-10-18, 유효)\n")
+        self.append("## D2. b  (2026-10-18, 유효)\n")
+        before = self.decisions.read_text(encoding="utf-8")
+        r = self.run_desk("append", str(self.decisions), "--file", self.scratch_file("## D2. c  (2026-10-18, 유효)\n"))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("D2", r.stderr)
+        self.assertIn("다음 번호는 D3", r.stderr)
+        self.assertEqual(self.decisions.read_text(encoding="utf-8"), before)
+
+    def test_duplicate_within_appended_text(self):
+        warnings = self.append("## D1. a  (2026-10-18, 유효)\n\n## D1. b  (2026-10-18, 유효)\n")
         self.assertEqual(len(warnings), 1)
         self.assertIn("겹칩니다: D1", warnings[0])
 

@@ -496,6 +496,21 @@ class InjectionTest(unittest.TestCase):
         self.assertIsNone(self.call("UserPromptSubmit (다시, 같은 위치)", "user-prompt-submit", {}))
         self.snapshot("location_change_prompt", "세션 중 브랜치가 바뀌면 다음 프롬프트에서 새 위치의 후보를 알린다")
 
+    def test_shell_cd_to_another_repository_is_ignored(self):
+        d = self.desk
+        self.call("SessionStart startup (main)", "session-start", {"source": "startup"})
+        outside = self.base / "outside"
+        outside.mkdir()
+        self.assertIsNone(self.call("UserPromptSubmit (Bash cd 저장소 밖)", "user-prompt-submit", {}, cwd=outside))
+        other = self.base / "other"
+        other.mkdir()
+        subprocess.run(["git", "init", "-q", str(other)], check=True)
+        self.assertIsNone(self.call("UserPromptSubmit (Bash cd 다른 저장소)", "user-prompt-submit", {}, cwd=other))
+        self.assertIsNone(self.call("UserPromptSubmit (원래 저장소로 돌아옴)", "user-prompt-submit", {}))
+        d.checkout("-b", "feature/login")
+        ctx = self.call("UserPromptSubmit (세션 밖에서 체크아웃)", "user-prompt-submit", {})
+        self.assertTrue(ctx.startswith("[agent-desk] 작업 위치가 바뀌었다 (myapp · main → myapp · feature/login)."))
+
     def test_location_change_worktree(self):
         d = self.desk
         tid = d.new("로그인 기능", "--slug", "login", "--branch", "feature/login")

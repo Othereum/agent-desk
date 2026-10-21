@@ -322,6 +322,10 @@ def location_change_context(payload: dict, tool_switch: bool) -> str | None:
         prev = None
     else:
         prev = session.get("location")
+        if not tool_switch and prev and (not loc or loc[0] != prev[0]):
+            # a prompt catches a checkout made outside the session, which keeps the repository;
+            # another repository here is the agent's own `cd` (the shell keeps its cwd)
+            return None
         if loc == prev or (prev is None and not tool_switch):
             if prev is None:
                 session["location"] = loc  # first prompt of a session that predates this record

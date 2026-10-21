@@ -296,6 +296,11 @@ def strip_comments(text: str) -> str:
     return re.sub(r"<!--.*?-->", "", text, flags=re.S)
 
 
+def decision_numbers(text: str) -> list[int]:
+    """The numbers of the decision headings in text, well formed or not, in order."""
+    return [int(m.group(1)) for line in strip_comments(text).splitlines() if (m := DECISION_LIKE.match(line))]
+
+
 def decision_problems(text: str) -> list[str]:
     """Warnings about decision headings: the format `## D<n>. 제목  (YYYY-MM-DD, 상태)` and
     numbers going 1, 2, 3... without a gap or a repeat."""
