@@ -12,9 +12,9 @@ Claude Code가 어제 하던 일을 기억하게 하는 플러그인이다. 진�
 
 ## 릴리스
 지금은 1.0 이전이다. 1.0 이후 규칙과 이유는 CONTRIBUTING.md에 있다.
-- origin/main에 푸시하는 것이 곧 릴리스다.
+- origin/main에 푸시하면 바로 릴리스된다.
 - 설치한 사용자에게 영향을 주는 변경을 origin/main에 넣을 때는 `.claude-plugin/plugin.json`의 `version` 올림을 포함한다.
-- 버전: 깨는 변경은 minor, 기능 추가·수정은 patch. 깨지는지는 변경할 때 판단한다.
+- 버전: breaking change는 minor를, 기능 추가·수정은 patch를 올린다.
 - 데이터 형식이 바뀌면 `desk.toml`의 schema_version을 검토한다.
 
 ## 테스트

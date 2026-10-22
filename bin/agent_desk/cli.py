@@ -521,6 +521,7 @@ def write_desk_file(args, append: bool) -> None:
     meta = current_meta(path) if kind else None
     auto = auto_updates(path, kind, meta, getattr(args, "verified", False))
     warnings, kept = [], {}
+    before = read_text(path) if path.name == "decisions.md" else ""
     if append:
         old = read_text(path)
         if old and not old.endswith("\n"):
@@ -546,7 +547,7 @@ def write_desk_file(args, append: bool) -> None:
         check_desk_text(path, content)
         text = update_frontmatter(content, auto) if auto else content
     if path.name == "decisions.md":
-        warnings += decision_problems(text)
+        warnings += decision_problems(text, before)
     if append and path.name == "log.md" and task_dir_of(path):
         warnings.append("log.md 항목은 `adesk log <id> --file <파일|->` 로 덧붙이세요. 시각 제목을 CLI가 현재 시각으로 붙입니다")
     write_text(path, text)

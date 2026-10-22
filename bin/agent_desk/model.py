@@ -301,9 +301,10 @@ def decision_numbers(text: str) -> list[int]:
     return [int(m.group(1)) for line in strip_comments(text).splitlines() if (m := DECISION_LIKE.match(line))]
 
 
-def decision_problems(text: str) -> list[str]:
-    """Warnings about decision headings: the format `## D<n>. 제목  (YYYY-MM-DD, 상태)` and
-    numbers going 1, 2, 3... without a gap or a repeat."""
+def decision_problems(text: str, before: str = "") -> list[str]:
+    """Warnings about decision headings: the format `## D<n>. 제목  (YYYY-MM-DD, 상태)`, numbers
+    in order without a repeat, and numbers in before (the file as it was) that text dropped.
+    A gap left by a decision the user deleted is not a problem: numbers are never reused."""
     problems, numbers = [], []
     for line in strip_comments(text).splitlines():
         like = DECISION_LIKE.match(line)
@@ -318,9 +319,10 @@ def decision_problems(text: str) -> list[str]:
         if n in seen:
             problems.append(f"결정 번호가 겹칩니다: D{n}")
         seen.add(n)
-    missing = [n for n in range(1, max(numbers, default=0) + 1) if n not in seen]
-    if missing:
-        problems.append(f"결정 번호가 빠졌습니다: {', '.join(f'D{n}' for n in missing)}")
+    lost = [n for n in dict.fromkeys(decision_numbers(before)) if n not in seen]
+    if lost:
+        problems.append(f"이번 쓰기로 결정이 사라졌습니다: {', '.join(f'D{n}' for n in lost)}. "
+                        "사용자가 지우라고 한 것이 아니면 되살리세요")
     if numbers != sorted(numbers):
         problems.append(f"결정 번호가 순서대로가 아닙니다: {', '.join(f'D{n}' for n in numbers)}")
     return problems

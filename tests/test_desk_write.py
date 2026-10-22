@@ -402,11 +402,24 @@ class DecisionHeadings(DeskFixture):
         self.assertEqual(self.append("## D2. 둘째 결정: x → y  (2026-10-18, 일부 대체 → D3: 범위)\n"), [])
         self.assertEqual(self.append("## D3. 셋째  (2026-10-18, 유효) → K0012\n"), [])
 
-    def test_gap(self):
+    def put(self, text: str) -> list[str]:
+        r = self.run_desk("put", str(self.decisions), "--file", self.scratch_file(text))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return json.loads(r.stdout).get("warnings", [])
+
+    def test_gap_is_not_a_problem(self):
+        # the user deleted D2 (numbers are not reused), or wrote the file that way
         self.append("## D1. a  (2026-10-18, 유효)\n")
-        warnings = self.append("## D3. c  (2026-10-18, 유효)\n")
+        self.assertEqual(self.append("## D3. c  (2026-10-18, 유효)\n"), [])
+        self.assertEqual(self.put("# 결정\n\n## D1. a  (2026-10-18, 유효)\n\n## D3. c  (2026-10-18, 유효)\n"), [])
+
+    def test_put_dropping_a_decision(self):
+        self.put("# 결정\n\n## D1. a  (2026-10-18, 유효)\n\n## D2. b  (2026-10-18, 유효)\n\n## D3. c  (2026-10-18, 유효)\n")
+        warnings = self.put("# 결정\n\n## D1. a  (2026-10-18, 대체됨 → D3)\n\n## D3. c  (2026-10-18, 유효)\n")
         self.assertEqual(len(warnings), 1)
-        self.assertIn("빠졌습니다: D2", warnings[0])
+        self.assertIn("사라졌습니다: D2", warnings[0])
+        # once written, the gap is the file's state: later writes do not warn again
+        self.assertEqual(self.append("## D4. d  (2026-10-18, 유효)\n"), [])
 
     def test_taken_number_is_refused(self):
         self.append("## D1. a  (2026-10-18, 유효)\n")
@@ -432,9 +445,9 @@ class DecisionHeadings(DeskFixture):
             self.assertIn("형식", warnings[0])
 
     def test_put_checks_too(self):
-        r = self.run_desk("put", str(self.decisions), "--file", self.scratch_file("# 결정\n\n## D2. b  (2026-10-18, 유효)\n"))
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("D1", json.loads(r.stdout)["warnings"][0])
+        warnings = self.put("# 결정\n\n## D2. b  (2026-10-18, 유효)\n\n## D1. a  (2026-10-18, 유효)\n")
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("순서대로가 아닙니다", warnings[0])
 
 
 if __name__ == "__main__":
