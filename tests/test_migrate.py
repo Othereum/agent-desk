@@ -42,6 +42,7 @@ class Migrate(unittest.TestCase):
         (self.project / "project.toml").write_text(
             f'key = "myapp"\nremotes = []\npaths = ["{self.repo.as_posix()}"]\n', encoding="utf-8")
         (self.project / "index.md").write_text("# index\n", encoding="utf-8")
+        (self.project / ".last-doctor").write_text("2026-10-18T05:23\n", encoding="utf-8")
         (self.project / "trash").mkdir()
         self.task("tasks", "261016-auth", "인증", "in_progress")
         self.task("tasks", "261016-login", "로그인", "todo", parent="261016-auth", related="261016-old")
@@ -75,6 +76,13 @@ class Migrate(unittest.TestCase):
         self.assertEqual((self.project / "261016-old" / "state.md").stat().st_mtime, self.old_mtime)
         _, context = session_start(self.env, self.repo)
         self.assertIn("  - 261016-login (로그인) · todo", context)
+
+    def test_runs_again_after_a_partial_run(self):
+        os.rename(self.project / "tasks" / "261016-auth", self.project / "261016-auth")
+        code, out = self.migrate()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(sorted(p.name for p in self.project.iterdir()), ["261016-auth", "261016-login", "261016-old"])
+        self.assertEqual(git(self.env, self.repo, "config", "--get", "agent-desk.dir"), self.project.as_posix())
 
     def test_dry_run_changes_nothing(self):
         code, out = self.migrate("--dry-run")

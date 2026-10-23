@@ -19,6 +19,35 @@ from .frontmatter import parse_frontmatter, split_frontmatter, update_frontmatte
 
 LEGACY_SCHEMA = 3
 OBSOLETE_KEYS = ("id", "project", "created", "updated", "verified", "related", "trashed", "links", "design_doc")
+OBSOLETE_FILES = ("index.md", "project.toml", ".last-doctor")  # .last-doctor: left by versions before 0.10
+BUSY_WAIT = 10.0  # seconds: a sync client or an indexer can hold a folder for a while
+
+
+def retry_busy(action) -> None:
+    """Run action, retrying while Windows refuses it because another process (a sync client,
+    an indexer) has the file or folder open. Running migrate again resumes after a failure."""
+    import time
+    deadline, delay = time.monotonic() + BUSY_WAIT, 0.05
+    while True:
+        try:
+            return action()
+        except PermissionError:
+            if time.monotonic() + delay > deadline:
+                raise DeskError("다른 프로그램(동기화 프로그램 등)이 파일을 쓰고 있어 변환을 마치지 못했습니다. "
+                                "잠시 뒤 `adesk migrate` 를 다시 실행하면 이어서 변환합니다") from None
+            time.sleep(delay)
+            delay = min(delay * 2, 1.0)
+
+
+def remove(path: Path) -> None:
+    """Delete an obsolete file or empty folder. A sync client may mark a folder read-only,
+    which makes Windows refuse to delete it: clear the flag first."""
+    import stat
+    try:
+        os.chmod(path, stat.S_IWRITE | stat.S_IREAD | (stat.S_IEXEC if path.is_dir() else 0))
+    except OSError:
+        pass
+    retry_busy(path.rmdir if path.is_dir() else path.unlink)
 
 
 def default_root() -> Path:
@@ -62,7 +91,7 @@ def migrate(root: Path, dry_run: bool) -> dict:
         changed += apply_project(plan, dry_run)
     changed.append(f"삭제 {marker.as_posix()}")
     if not dry_run:
-        marker.unlink()
+        remove(marker)
     return {"root": root.as_posix(), "dry_run": dry_run, "changed": changed,
             "note": "다른 PC의 클론은 `git config agent-desk.dir <데스크 폴더>` 로 등록하세요"}
 
@@ -100,18 +129,9 @@ def apply_project(plan: dict, dry_run: bool) -> list[str]:
         changed.append(f"이동 {d.relative_to(project).as_posix()} → {d.name}")
         if not dry_run:
             dest = project / d.name
-            os.rename(d, dest)
+            retry_busy(lambda: os.rename(d, dest))
             rewrite_state(dest / "state.md")
-    for name in ("tasks", "archive", "trash"):
-        if (project / name).is_dir():
-            changed.append(f"삭제 {project.name}/{name}/")
-            if not dry_run:
-                (project / name).rmdir()
-    for name in ("index.md", "project.toml"):
-        if (project / name).is_file():
-            changed.append(f"삭제 {project.name}/{name}")
-            if not dry_run:
-                (project / name).unlink()
+    # before project.toml goes: a migrate run again after a failure still has the paths
     for raw in plan["paths"]:
         repo = Path(native_path(raw))
         if not repo.is_dir() or git(repo, "rev-parse", "--git-dir") is None:
@@ -121,6 +141,16 @@ def apply_project(plan: dict, dry_run: bool) -> list[str]:
         changed.append(f"등록 {repo.as_posix()}: git config {DIR_KEY} {project.as_posix()}")
         if not dry_run:
             git(repo, "config", DIR_KEY, project.as_posix())
+    for name in ("tasks", "archive", "trash"):
+        if (project / name).is_dir():
+            changed.append(f"삭제 {project.name}/{name}/")
+            if not dry_run:
+                remove(project / name)
+    for name in OBSOLETE_FILES:
+        if (project / name).is_file():
+            changed.append(f"삭제 {project.name}/{name}")
+            if not dry_run:
+                remove(project / name)
     return changed
 
 
