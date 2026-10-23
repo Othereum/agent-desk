@@ -1,13 +1,8 @@
 ---
-id: {{id}}
-title: {{title}}
-status: {{status}}
-project: {{project}}
-branches: {{branches}}
-parent: {{parent}}
-created: {{date}}
-updated: {{date}}
-verified: {{datetime}}
+title: 제목
+status: todo
+parent:
+branches: []
 ---
 ## 목표
 

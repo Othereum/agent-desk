@@ -15,12 +15,11 @@ Claude Code가 어제 하던 일을 기억하게 하는 플러그인이다. 진�
 - origin/main에 푸시하면 바로 릴리스된다.
 - 설치한 사용자에게 영향을 주는 변경을 origin/main에 넣을 때는 `.claude-plugin/plugin.json`의 `version` 올림을 포함한다.
 - 버전: breaking change는 minor를, 기능 추가·수정은 patch를 올린다.
-- 데이터 형식이 바뀌면 `desk.toml`의 schema_version을 검토한다.
+- 데이터 형식이 바뀌면 이전 형식을 알아보고 변환하는 `adesk migrate`를 함께 고친다.
 
 ## 테스트
 - hook·주입·CLI 코드를 바꾸면 `python -m unittest discover -s tests`로 테스트를 돌린다.
 - 스킬, `hooks/hooks.json`, `.claude-plugin/`의 manifest를 바꾸면 `claude plugin validate .`를 돌린다. 루트 CLAUDE.md 경고는 의도한 것이므로 무시한다.
-- 회귀 테스트 결과 주입 기준(tests/snapshots/)과 다르게 나오고 그게 의도한 변경이면 `AGENT_DESK_UPDATE_SNAPSHOTS=1`로 기준을 갱신하고 diff를 검토한다.
 
 ## 문구
 - 코드 문자열, 문서, 커밋 메시지에 특정 서비스(클라우드 저장소)나 사내 프로젝트 이름을 쓰지 않고 일반화한다.
