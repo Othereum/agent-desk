@@ -10,9 +10,8 @@ from pathlib import Path
 from .core import current_branch, desk_dir
 from .desk import Task, is_legacy, load_tasks, stray_files
 
-RULES_LINE = ("사용자의 일이 이 중 하나이거나 세션을 넘겨 이어질 새 일이면, "
-              "작업을 시작하기 전에 agent-desk:desk 스킬부터 읽는다. 태스크를 읽고 기록하는 절차는 스킬에 있다.")
-MIGRATE_LINE = ("agent-desk 데이터가 이전 형식이다. 사용자에게 `adesk migrate` 실행을 한 줄로 제안할 것"
+RULES_LINE = ("데스크에 접근하려면(태스크 읽기·기록·생성) 반드시 agent-desk:desk 스킬부터 읽는다.")
+MIGRATE_LINE = ("agent-desk 데이터가 이전 형식이다. 사용자에게 `adesk migrate` 실행을 제안할 것"
                 "(`--dry-run` 으로 바뀔 내용을 먼저 보여 줄 수 있음).")
 
 
@@ -23,7 +22,7 @@ def session_start_context(payload: dict) -> str | None:
         from .migrate import legacy_root
         return f"[agent-desk] {MIGRATE_LINE}" if legacy_root() else None
     branch = current_branch(cwd)
-    head = f"[agent-desk] 데스크 {desk.as_posix()} · 브랜치 {branch or '(없음)'}"
+    head = f"[agent-desk] 데스크 `{display_path(desk)}` · 브랜치 `{branch or '(없음)'}`"
     if not desk.is_dir():
         return (f"{head}\n경고: git config agent-desk.dir 가 가리키는 폴더가 없다. "
                 "사용자에게 알리고, 폴더를 옮겼으면 등록을 고칠 것.")
@@ -31,7 +30,15 @@ def session_start_context(payload: dict) -> str | None:
         return f"{head}\n{MIGRATE_LINE}"
     tasks = load_tasks(desk)
     lines = [head] + task_list(tasks, branch) + warning_lines(tasks)
-    return "\n".join(lines + [RULES_LINE])
+    return "\n".join(lines + ["", RULES_LINE])
+
+
+def display_path(path: Path) -> str:
+    """Path with the home directory shortened to `~`."""
+    try:
+        return "~/" + path.relative_to(Path.home()).as_posix()
+    except ValueError:
+        return path.as_posix()
 
 
 def task_list(tasks: list[Task], branch: str | None) -> list[str]:
@@ -54,7 +61,7 @@ def task_line(task: Task, branch: str | None, nested: bool) -> str:
     if task.parent and not nested:
         parts.append(f"상위 {task.parent}")
     if branch and branch in task.branches:
-        parts.append("이 브랜치")
+        parts.append("현재 브랜치에 연결됨")
     return ("  - " if nested else "- ") + " · ".join(parts)
 
 
