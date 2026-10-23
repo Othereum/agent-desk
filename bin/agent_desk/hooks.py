@@ -10,7 +10,7 @@ from pathlib import Path
 from .core import current_branch, desk_dir
 from .desk import Task, is_legacy, load_tasks, stray_files
 
-RULES_LINE = ("데스크에 접근하려면(태스크 읽기·기록·생성) 반드시 agent-desk:desk 스킬부터 읽는다.")
+RULES_LINE = ("데스크를 사용하려면(태스크 읽기·기록·생성) 반드시 agent-desk:desk 스킬부터 읽는다.")
 MIGRATE_LINE = ("agent-desk 데이터가 이전 형식이다. 사용자에게 `adesk migrate` 실행을 제안할 것"
                 "(`--dry-run` 으로 바뀔 내용을 먼저 보여 줄 수 있음).")
 
