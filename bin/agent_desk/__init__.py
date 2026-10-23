@@ -13,7 +13,7 @@ import json
 import sys
 
 REMOVED_COMMAND = ("adesk 의 기록 명령(focus, new, put, append, log, status, close 등)은 0.13에서 없어졌습니다. "
-                   "데스크 파일은 Read·Edit·Write로 직접 고칩니다(agent-desk:desk 스킬). "
+                   "데스크 파일은 직접 고칩니다(agent-desk:desk 스킬). "
                    "남은 명령: adesk migrate [--dry-run] [--root DIR]")
 
 

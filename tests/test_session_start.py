@@ -106,7 +106,7 @@ class Entry(unittest.TestCase):
     def test_removed_command_explains(self):
         r = run(self.env, "focus", "261016-login")
         self.assertEqual(r.returncode, 2)
-        self.assertIn("Read·Edit·Write로 직접", r.stderr)
+        self.assertIn("직접 고칩니다", r.stderr)
 
 
 if __name__ == "__main__":
