@@ -1,6 +1,6 @@
 {
   "name": "agent-desk",
-  "owner": { "name": "이석진" },
-  "description": "코딩 에이전트용 태스크 기록 공간 agent-desk",
+  "owner": { "name": "Othereum" },
+  "description": "agent-desk, a task desk for coding agents",
   "plugins": [{ "name": "agent-desk", "source": "./" }]
 }

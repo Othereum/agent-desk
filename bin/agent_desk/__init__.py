@@ -12,15 +12,15 @@ core (io, git) → frontmatter → desk (task folders) → hooks, migrate.
 import json
 import sys
 
-REMOVED_COMMAND = ("adesk 의 기록 명령(focus, new, put, append, log, status, close 등)은 0.13에서 없어졌습니다. "
-                   "데스크 파일은 직접 고칩니다(agent-desk:desk 스킬). "
-                   "남은 명령: adesk migrate [--dry-run] [--root DIR]")
+REMOVED_COMMAND = ("The adesk recording commands (focus, new, put, append, log, status, close, ...) were removed in 0.13. "
+                   "Edit the desk files directly (agent-desk:desk skill). "
+                   "Remaining command: adesk migrate [--dry-run] [--root DIR]")
 
 
 def hook_failure(event: str, error: BaseException) -> None:
     """Tell the user a hook failed: stderr of a hook that exits 0 is not shown anywhere, so a
     broken hook would silently stop the injection (e.g. a syntax error while editing the plugin)."""
-    message = f"[agent-desk] hook {event} 실패, 태스크 목록 주입이 빠졌습니다: {type(error).__name__}: {error}"
+    message = f"[agent-desk] hook {event} failed, the task list was not injected: {type(error).__name__}: {error}"
     print(json.dumps({"systemMessage": message}, ensure_ascii=False))
     print(message, file=sys.stderr)
 

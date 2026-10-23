@@ -53,7 +53,7 @@ class SessionStart(unittest.TestCase):
         head = self.context().splitlines()[0]
         self.assertIn("myapp", head)
         self.assertIn("feature/login", head)
-        self.assertIn("열린 태스크 없음.", self.context())
+        self.assertIn("No open tasks.", self.context())
 
     def test_display_path_shortens_only_under_home(self):
         home = Path("/home/u") if sys.platform != "win32" else Path("C:/Users/u")
@@ -82,15 +82,15 @@ class SessionStart(unittest.TestCase):
         (ok / "state-PC2.md").write_text("x", encoding="utf-8")
         (self.desk / "261016-empty").mkdir()
         context = self.context()
-        self.assertIn("경고: 261016-bad 의 state.md frontmatter를 읽을 수 없다", context)
-        self.assertIn("경고: 261016-weird 의 status가", context)
-        self.assertIn("경고: 261016-empty 의 state.md가 없다", context)
-        self.assertIn("경고: 261016-ok 폴더에 예상하지 않은 파일이 있다(동기화 충돌 사본일 수 있음): state-PC2.md", context)
+        self.assertIn("Warning: 261016-bad: cannot read the state.md frontmatter", context)
+        self.assertIn("Warning: 261016-weird: status is not one of", context)
+        self.assertIn("Warning: 261016-empty: no state.md", context)
+        self.assertIn("Warning: unexpected files in the 261016-ok folder (possibly sync conflict copies): state-PC2.md", context)
         self.assertNotIn("- 261016-bad", context)
 
     def test_missing_desk_folder(self):
         git(self.env, self.repo, "config", "agent-desk.dir", (self.base / "nowhere").as_posix())
-        self.assertIn("가리키는 폴더가 없다", self.context())
+        self.assertIn("points to does not exist", self.context())
 
     def test_legacy_desk_folder_asks_for_migrate(self):
         (self.desk / "tasks").mkdir()
@@ -128,7 +128,7 @@ class Entry(unittest.TestCase):
     def test_removed_command_explains(self):
         r = run(self.env, "focus", "261016-login")
         self.assertEqual(r.returncode, 2)
-        self.assertIn("직접 고칩니다", r.stderr)
+        self.assertIn("Edit the desk files directly", r.stderr)
 
 
 if __name__ == "__main__":

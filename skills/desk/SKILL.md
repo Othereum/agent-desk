@@ -1,44 +1,45 @@
 ---
 name: desk
-description: 데스크에서 태스크를 읽거나 기록을 남기고, 새 태스크를 만듭니다. 일을 이어가거나 새로 시작할 때, 방향을 확정하거나 단계를 마쳤을 때, 기존 설계의 이유나 기각한 대안을 묻거나 설명할 때 사용합니다. 데스크 정보가 없으면 사용하지 않습니다.
+description: Reads tasks from the desk, records progress in them, and creates new ones. Use when continuing or starting work, when a direction is settled or a step is finished, and when asked about or explaining the reasons behind an existing design or the alternatives it rejected. Do not use when there is no desk information.
 ---
 
 # agent-desk
 
-**데스크**는 태스크 단위로 맥락(현황, 결정, 알아낸 것)을 Markdown 파일로 남겨 다음 세션에서 이어갈 수 있도록 하는 공간이다.
+The **desk** is where context (where things stand, decisions, findings) is kept per task as Markdown files, so the next session can pick the work up.
 
-## 저장소 등록
+## Registering a repository
 
-저장소의 데스크 폴더는 `git config agent-desk.dir`에 등록된다. 사용자가 등록을 요청하면 사용자가 원하는 위치에 폴더를 만들고 등록한다. 사용자가 위치를 지정하지 않았다면 클라우드 동기화 폴더를 가볍게 권해본다. 예: `~/XxxDrive/desk/myapp`
+A repository's desk folder is registered in `git config agent-desk.dir`. When the user asks to register, create the folder where the user wants it and register it. If the user does not name a location, lightly suggest a cloud-synced folder. Example: `~/XxxDrive/desk/myapp`
 
-## 구조
+## Structure
 
 ```
-<데스크 폴더>/
+<desk folder>/
 └── <task-id>/
-    ├── state.md      # 현황: 이것만 읽어도 이어서 할 수 있게, 60줄 이내 권장
-    ├── decisions.md  # 결정
-    ├── log.md        # 알아낸 것(원인, 확인한 사실, 막힌 지점), 덧붙이기만
-    └── files/        # 첨부파일(근거 자료)
+    ├── state.md      # where things stand: enough to continue from on its own, 60 lines or fewer recommended
+    ├── decisions.md  # decisions
+    ├── log.md        # findings (causes, confirmed facts, dead ends), append only
+    └── files/        # attachments (evidence)
 ```
 
-- 태스크 ID는 `<yymmdd>-<slug>`
-- 각 파일의 템플릿은 이 스킬의 base directory 기준 `../../templates/<lang>/`에 있다.
-- state.md 상단에는 태스크 정보를 frontmatter로 기술한다.
-  - `title`: 태스크 제목
-  - `status`: 태스크 상태
-    - 열린 태스크: `todo`, `in_progress`, `on_hold`
-    - 닫힌 태스크: `done`, `cancelled`
-  - `parent`: 상위 태스크 ID (한 단계만 허용)
-  - `branches`: `[a, b]`, 이 태스크의 작업을 진행할 브랜치
+- A task ID is `<yymmdd>-<slug>`.
+- The templates for each file are in `../../templates/<lang>/`, relative to this skill's base directory.
+- Write records in the user's conversation language; when a task already has records, follow their language. If there is no `templates/<lang>/` for that language, translate the `en` templates.
+- The top of state.md describes the task as frontmatter.
+  - `title`: the task title
+  - `status`: the task status
+    - open tasks: `todo`, `in_progress`, `on_hold`
+    - closed tasks: `done`, `cancelled`
+  - `parent`: the parent task ID (one level only)
+  - `branches`: `[a, b]`, the branches where this task's work is done
 
-## 규칙
+## Rules
 
-- **제안하되, 사용자가 정한다.** 목표가 분명하고 세션을 넘겨 이어질만한 일을 새로 시작하려 하면 기록할지 먼저 제안한다. 잠깐의 질문·조사·일회성 수정에는 묻지 않는다. 세션에서 어느 태스크를 할지도 사용자의 요청으로 정하고, 애매하면 묻는다. 정해지면 그 태스크 내용을 읽고 시작한다.
-- **다음 세션이 이어갈 수 있게 유지한다.** 의미 있는 단계가 끝나거나 세션을 정리할 때 state.md를 최신으로 맞춘다.
-- **결정은 확정한 즉시 남긴다.** `## Dn. 제목  (YYYY-MM-DD, 유효)` 아래에 결정 / 이유 / 기각한 대안 / 영향 범위. 기각한 대안과 이유가 같은 논의의 반복을 막는 핵심이다. 바뀐 결정은 지우지 않고 새 항목을 추가한 뒤 기존 항목의 머리 줄 상태를 `대체됨 → Dm`(일부면 `일부 대체됨 → Dm`)으로 바꾼다. 취향 수준의 선택은 결정으로 남기지 않는다.
-- **상위 태스크의 유효한 결정을 따른다.** 어긋나야 하면 사용자에게 확인한다. 흐름 전체에 걸친 결정과 결과는 상위 태스크에 남긴다.
-- **기록은 확인할 출발점이다.** 코드와 어긋나면 코드를 우선하고 기록을 고친다. 기존 설계를 바꾸자고 제안하거나 이유를 설명하기 전에는 종료된 태스크까지 decisions.md에서 이전 결정과 기각한 대안을 찾는다.
-- **저장소 산출물에는 데스크를 가리키지 않는다.** 코드·문서·커밋 메시지·PR에 태스크 ID, 결정 번호, 데스크 경로를 쓰지 않고 근거를 풀어 쓴다. 데스크는 이 사용자만 보는 데이터다.
-- **기록을 지우는 것은 사용자가 요청할 때만** 한다(태스크 폴더, 결정, 첨부파일).
-- 태스크의 맥락이 아닌 것(태스크가 끝나도 유효한 사실, 일하는 방식)은 데스크에 두지 않는다.
+- **Suggest, but the user decides.** When about to start new work with a clear goal that is likely to span sessions, first suggest recording it. Do not ask for a quick question, investigation or one-off fix. Which task a session works on is also set by the user's request; ask when it is unclear. Once set, read that task before starting.
+- **Keep it ready for the next session.** When a meaningful step is finished or the session is wrapping up, bring state.md up to date.
+- **Record a decision as soon as it is settled.** Under `## Dn. Title  (YYYY-MM-DD, active)`, with the status words in the records' language as in the template: decision / reason / rejected alternatives / scope. The rejected alternatives and why are what keep the same discussion from repeating. Do not delete a changed decision: add a new entry, then change the old entry's heading status to `superseded → Dm` (`partly superseded → Dm` if only in part). Do not record matters of taste as decisions.
+- **Follow the parent task's active decisions.** If you need to depart from one, confirm with the user. Decisions and outcomes that span the whole line of work go in the parent task.
+- **Records are a starting point to verify.** When they disagree with the code, the code wins and the record gets fixed. Before proposing a change to an existing design or explaining its reasons, look through decisions.md, closed tasks included, for earlier decisions and rejected alternatives.
+- **Repository output never points at the desk.** Do not put task IDs, decision numbers or desk paths in code, docs, commit messages or PRs; spell out the reasons instead. The desk is data only this user sees.
+- **Delete records only when the user asks** (task folders, decisions, attachments).
+- What is not context for a task (facts that stay true after the task ends, ways of working) does not belong in the desk.

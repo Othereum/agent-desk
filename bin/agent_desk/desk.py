@@ -45,16 +45,16 @@ def load_tasks(desk: Path) -> list[Task]:
     for d in sorted(p for p in desk.iterdir() if p.is_dir() and not p.name.startswith(".")):
         state = d / "state.md"
         if not state.is_file():
-            tasks.append(Task(d, {}, "state.md가 없다"))
+            tasks.append(Task(d, {}, "no state.md"))
             continue
         try:
             meta = parse_frontmatter(read_text(state))
         except (DeskError, OSError, UnicodeDecodeError) as e:
-            tasks.append(Task(d, {}, f"state.md frontmatter를 읽을 수 없다({e})"))
+            tasks.append(Task(d, {}, f"cannot read the state.md frontmatter ({e})"))
             continue
         task = Task(d, meta)
         if task.status not in OPEN_STATUSES + CLOSED_STATUSES:
-            task.error = f"status가 {', '.join(OPEN_STATUSES + CLOSED_STATUSES)} 중 하나가 아니다({task.status or '없음'})"
+            task.error = f"status is not one of {', '.join(OPEN_STATUSES + CLOSED_STATUSES)} ({task.status or 'missing'})"
         tasks.append(task)
     return tasks
 

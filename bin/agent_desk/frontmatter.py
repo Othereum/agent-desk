@@ -26,11 +26,11 @@ _ESCAPES = {"\\": "\\", '"': '"', "n": "\n", "t": "\t", "/": "/", "0": "\0"}
 def split_frontmatter(text: str) -> tuple[list[str], str]:
     lines = text.split("\n")
     if not lines or lines[0].strip() != "---":
-        raise DeskError("frontmatter가 없습니다")
+        raise DeskError("no frontmatter")
     for end in range(1, len(lines)):
         if lines[end].strip() == "---":
             return lines[1:end], "\n".join(lines[end + 1:])
-    raise DeskError("frontmatter가 닫히지 않았습니다")
+    raise DeskError("the frontmatter is not closed")
 
 
 # ---------------------------------------------------------------- read
@@ -49,7 +49,7 @@ def _quoted(s: str, i: int) -> tuple[str, int]:
         if q == '"' and c == "\\":
             esc = s[i + 1:i + 2]
             if esc not in _ESCAPES:
-                raise ValueError(f"지원하지 않는 이스케이프 \\{esc}")
+                raise ValueError(f"unsupported escape \\{esc}")
             out.append(_ESCAPES[esc])
             i += 2
             continue
@@ -57,7 +57,7 @@ def _quoted(s: str, i: int) -> tuple[str, int]:
             return "".join(out), i + 1
         out.append(c)
         i += 1
-    raise ValueError("따옴표가 닫히지 않았습니다")
+    raise ValueError("unclosed quote")
 
 
 def _plain_end(s: str, i: int, stops: str = "") -> int:
@@ -78,7 +78,7 @@ def _scalar(s: str, i: int, stops: str = "") -> tuple[str, int]:
     if c in "\"'":
         return _quoted(s, i)
     if c in _UNSUPPORTED_START or (stops and c in "[{#"):
-        raise ValueError(f"지원하지 않는 YAML 문법({c})")
+        raise ValueError(f"unsupported YAML syntax ({c})")
     value = s[i:_plain_end(s, i, stops)].rstrip()
     return value, i + len(value)
 
@@ -90,7 +90,7 @@ def _flow_list(s: str, i: int) -> tuple[list[str], int]:
         while i < len(s) and s[i] in " \t":
             i += 1
         if i >= len(s):
-            raise ValueError("목록의 ]가 없습니다")
+            raise ValueError("the list has no ]")
         if s[i] == "]":
             return items, i + 1
         value, i = _scalar(s, i, stops=",[]{}")
@@ -103,7 +103,7 @@ def _flow_list(s: str, i: int) -> tuple[list[str], int]:
             items.append(value)
             return items, i + 1
         else:
-            raise ValueError("목록 항목 사이에는 쉼표가 필요합니다")
+            raise ValueError("list items need a comma between them")
 
 
 def _value(raw: str) -> tuple[str | list[str], str]:
@@ -114,13 +114,13 @@ def _value(raw: str) -> tuple[str | list[str], str]:
     if raw[i] == "[":
         value, end = _flow_list(raw, i)
     elif raw[i] == "-" and raw[i + 1:i + 2] in ("", " ", "\t"):
-        raise ValueError("목록은 다음 줄부터 `  - 항목`으로 쓰거나 [a, b] 로 쓸 것")
+        raise ValueError("write a list as `  - item` lines below the key, or as [a, b]")
     else:
         value, end = _scalar(raw, i)
     rest = raw[end:]
     if rest.strip():
         if not rest.lstrip().startswith("#") or rest[:1] not in (" ", "\t"):
-            raise ValueError(f"값 뒤에 알 수 없는 내용: {rest.strip()}")
+            raise ValueError(f"unexpected text after the value: {rest.strip()}")
     return value, rest.rstrip()
 
 
@@ -138,9 +138,9 @@ def _parse(fm_lines: list[str]) -> tuple[dict, dict]:
                 sp = spans[key]
                 value, comment = _value(item.group(2) or "")
                 if isinstance(value, list):
-                    raise ValueError("중첩 목록은 지원하지 않습니다")
+                    raise ValueError("nested lists are not supported")
                 if item.group(2) and item.group(2)[0] not in "\"'" and re.search(r":(\s|$)", value):
-                    raise ValueError("목록 항목 안의 `key: value`(중첩 구조)는 지원하지 않습니다. 문자열이면 따옴표로 감쌀 것")
+                    raise ValueError("`key: value` inside a list item (a nested structure) is not supported; quote it if it is a string")
                 if sp["kind"] == "empty":
                     sp["kind"], data[key] = "block", []
                 data[key].append(value)
@@ -148,17 +148,17 @@ def _parse(fm_lines: list[str]) -> tuple[dict, dict]:
                 continue
             m = _KEY.match(line)
             if not m:
-                raise ValueError("`key: value` 형식이 아닙니다(들여쓰기·중첩 구조는 지원하지 않음)")
+                raise ValueError("not a `key: value` line (indentation and nested structures are not supported)")
             key = m.group(1)
             if key in data:
-                raise ValueError(f"키 중복: {key}")
+                raise ValueError(f"duplicate key: {key}")
             value, comment = _value(m.group(2))
             empty = value == "" and not m.group(2).split("#")[0].strip()
             kind = "flow" if isinstance(value, list) else "empty" if empty else "scalar"
             data[key] = value
             spans[key] = {"start": n, "end": n + 1, "kind": kind, "comment": comment}
         except ValueError as e:
-            raise DeskError(f"frontmatter {n + 2}번째 줄: {e}: {line.strip()}") from None
+            raise DeskError(f"frontmatter line {n + 2}: {e}: {line.strip()}") from None
     return data, spans
 
 

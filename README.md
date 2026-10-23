@@ -1,153 +1,157 @@
 # agent-desk
 
-**Claude Code가 어제 하던 일을 기억하게 하는 플러그인.**
+English | [한국어](README.ko.md)
 
-진행상황, 결정, 발견을 태스크 단위로 기록해 맥락을 보존하고, 새 세션에서 그 일을 이어가면 Claude가 기록을 읽고 시작합니다. "어디까지 했고 왜 이렇게 했는지" 다시 설명하지 않아도 됩니다.
+**A plugin that lets Claude Code remember what it was working on yesterday.**
 
-## 설치
+It keeps context by recording progress, decisions and findings per task, and when you continue that work in a new session, Claude reads the record before it starts. You do not have to explain again "how far we got and why we did it this way."
 
-> Python 3.11 이상과 git이 필요합니다.
+## Installation
+
+> Requires Python 3.11 or later and git.
 
 ```
 claude plugin marketplace add Othereum/agent-desk
 claude plugin install agent-desk@agent-desk
 ```
 
-## 사용 방법
+## Usage
 
-### 처음 쓰는 저장소
+### A repository you use for the first time
 
-저장소의 기록을 보관할 데스크 폴더를 등록합니다.
-
-```
-나      /desk 이 저장소를 등록해줘
-Claude  클라우드 동기화 폴더가 있어서 다음 위치를 제안합니다: `~/XxxDrive/desk/myapp`
-        이 위치로 폴더를 만들고 저장소를 등록할까요?
-나      응
-Claude  이 저장소를 데스크 폴더 `~/XxxDrive/desk/myapp`에 등록했습니다.
-```
-
-### 태스크 시작하기
-
-여러 세션에 걸칠만한 일을 시작하려고 하면 Claude가 태스크로 기록할지 묻습니다. 먼저 "태스크로 만들어줘"라고 말해도 됩니다.
-처음 정한 목표와 범위가 기록에 남아 며칠 뒤에도 같은 전제에서 이어갈 수 있습니다.
+Register a desk folder to keep the repository's records.
 
 ```
-나      로그인 기능 만들 거야. 이번엔 이메일 로그인만 하고 소셜 로그인은 빼자.
-Claude  태스크로 기록하면서 진행할까요?
-나      응
-Claude  태스크 261016-login을 만들고 지금 브랜치(feature/login)에 연결했습니다.
-        목표: 이메일 로그인 (소셜 로그인은 범위 밖)
+You     /desk register this repository
+Claude  You have a cloud-synced folder, so I suggest this location: `~/XxxDrive/desk/myapp`
+        Shall I create the folder there and register the repository?
+You     Yes
+Claude  Registered this repository with the desk folder `~/XxxDrive/desk/myapp`.
 ```
 
-### 방향을 정하면 결정으로 남기기
+### Starting a task
 
-함께 정한 방향은 기각한 대안과 이유까지 결정으로 남깁니다.
-
-```
-나      토큰 갱신은 만료 5분 전에 하자. 요청마다 검사하는 건 너무 무거워.
-Claude  결정 D1로 기록했습니다.
-        기각한 대안: 요청마다 만료 검사 (모든 요청에 비용이 듦)
-```
-
-### 세션을 마치고 다음 날 이어서
-
-세션을 정리하면 현황을 최신으로 맞춥니다.
-Claude는 새 세션에서 열린 태스크 목록을 받은 채로 시작하므로, 어느 일을 이어갈지 말하면 그 기록을 읽고 시작합니다.
+When you are about to start work that is likely to span several sessions, Claude asks whether to record it as a task. You can also say "make this a task" first.
+The goal and scope you set at the start stay in the record, so you can continue from the same premises days later.
 
 ```
-나      오늘은 여기까지 하자.
-Claude  현황을 갱신했습니다. 로그인 API 완료, 다음 할 일은 토큰 갱신입니다.
+You     I'm going to build login. Only email login this time, leave out social login.
+Claude  Shall I record this as a task as we go?
+You     Yes
+Claude  Created task 261016-login and linked it to the current branch (feature/login).
+        Goal: email login (social login out of scope)
+```
+
+### Recording a direction as a decision
+
+A direction you settle together is recorded as a decision, along with the rejected alternatives and why.
+
+```
+You     Let's refresh the token 5 minutes before it expires. Checking on every request is too heavy.
+Claude  Recorded as decision D1.
+        Rejected alternative: checking expiry on every request (costs every request)
+```
+
+### Ending a session and continuing the next day
+
+When you wrap up a session, Claude brings the task's state up to date.
+A new session starts with the list of open tasks, so when you say which work to continue, Claude reads that record and starts.
+
+```
+You     Let's stop here for today.
+Claude  Updated the state. The login API is done; next is token refresh.
 ```
 
 ```
-(다음 날, 새 세션)
-나      로그인 작업 이어서 하자.
-Claude  261016-login 기록을 읽었습니다. 로그인 API까지 끝났고 다음은 토큰 갱신입니다.
-        갱신은 만료 5분 전에 하기로 했으니(D1) 요청 경로에는 검사를 넣지 않겠습니다.
+(the next day, a new session)
+You     Let's continue the login work.
+Claude  Read the 261016-login record. The login API is done and token refresh is next.
+        We decided to refresh 5 minutes before expiry (D1), so I won't add a check to the request path.
 ```
 
-### 지난 결정의 이유 묻기
+### Asking why an earlier decision was made
 
-예전에 왜 그렇게 정했는지 물으면, 이미 끝난 태스크까지 결정 기록에서 찾아 답합니다. 같은 논의를 처음부터 다시 하지 않아도 됩니다.
-
-```
-나      토큰 갱신을 왜 요청마다 검사하지 않고 미리 하게 했지?
-Claude  261016-login의 D1에서 정했습니다. 요청마다 만료를 검사하면
-        모든 요청에 비용이 들어서 기각했습니다.
-```
-
-### 태스크 마치기
-
-마칠 때 현황에 최종 결과를 남기고 완료로 표시합니다. 결정은 태스크와 함께 남습니다.
+When you ask why something was decided, Claude looks through the decision records, finished tasks included, and answers. You do not have to have the same discussion again from scratch.
 
 ```
-나      로그인 머지했어. 마무리하고 태스크 닫자.
-Claude  현황에 최종 결과(이메일 로그인, 만료 5분 전 갱신)를 적고
-        태스크를 완료로 표시했습니다.
+You     Why did we refresh the token ahead of time instead of checking on every request?
+Claude  It was decided in D1 of 261016-login. Checking expiry on every request
+        costs every request, so that was rejected.
 ```
 
-## 핵심 개념
+### Finishing a task
 
-agent-desk가 관리하는 기록 공간을 **데스크**라고 부릅니다.
+When you finish, Claude writes the final outcome into the state and marks the task done. The decisions stay with the task.
 
-| 이름 | 가리키는 것 |
+```
+You     Login is merged. Wrap it up and close the task.
+Claude  Wrote the final outcome (email login, refresh 5 minutes before expiry)
+        into the state and marked the task done.
+```
+
+## Core concepts
+
+The record space agent-desk manages is called the **desk**.
+
+| Name | What it means |
 |---|---|
-| 데스크 | agent-desk의 기록 공간 (저장소마다 데스크 폴더 하나) |
-| 태스크 기록 | 태스크 하나의 현황 · 결정 · 로그 |
-| 현황 / 결정 / 로그 | state.md / decisions.md / log.md |
-| 첨부파일 | 태스크에 붙여 둔 파일 (files/) |
-| 태스크 상태 | 열림(예정·진행중·보류), 닫힘(완료·취소) |
+| desk | agent-desk's record space (one desk folder per repository) |
+| task record | the state, decisions and log of one task |
+| state / decisions / log | state.md / decisions.md / log.md |
+| attachments | files attached to a task (files/) |
+| task status | open (todo, in progress, on hold), closed (done, cancelled) |
 
-### 태스크(task)
+### Tasks
 
-태스크는 "로그인 기능 구현", "저장 버그 수정"처럼 하나의 목표를 가진 일이고, agent-desk의 기록은 모두 태스크 단위로 나뉘어 저장됩니다. 태스크마다 세 가지를 남깁니다. **지금 어디까지 했는지**(현황, state), **무엇을 왜 정했는지**(결정, decisions), **무엇을 알아냈는지**(로그, log)입니다.
+A task is a piece of work with one goal, like "implement login" or "fix the save bug", and all of agent-desk's records are kept per task. Each task keeps three things: **where things stand** (state), **what was decided and why** (decisions), and **what was found** (log).
 
-세션을 시작하면 Claude는 열린 태스크 목록을 받습니다. 무슨 일을 할지는 사용자가 정하고, Claude는 그 태스크의 기록을 읽고 시작해 그 태스크에 기록합니다. 브랜치에 태스크를 연결해 두면 목록에 표시되어, 이 브랜치의 일을 하자고 하면 그 태스크로 시작합니다.
+When a session starts, Claude receives the list of open tasks. You decide what to work on; Claude reads that task's record, starts, and records into it. If you link a task to a branch, the list shows it, so asking to do this branch's work starts with that task.
 
 ```
-git 브랜치                 agent-desk 태스크
+git branch                 agent-desk task
 ─────────────              ─────────────────────────────────────────────
 feature/login   ───▶       261016-login/
-                             ├─ state.md       지금 어디까지, 다음에 할 일
-                             ├─ decisions.md   무엇을 왜 정했나 (기각한 대안 포함)
-                             └─ log.md         무엇을 알아냈나
+                             ├─ state.md       how far it got, what is next
+                             ├─ decisions.md   what was decided and why (rejected alternatives included)
+                             └─ log.md         what was found
 fix/crash       ───▶       261016-crash-on-save/
-                ···        브랜치 없는 태스크 (요청으로 골라 시작)
+                ···        tasks without a branch (picked by request)
 ```
 
-## 데이터 구조
+## Data layout
 
-데스크의 기록은 모두 사람이 읽고 고칠 수 있는 Markdown 파일이고, 저장소 밖의 데스크 폴더에 쌓입니다. Claude는 이 파일을 직접 읽고 고칩니다.
+The desk's records are all Markdown files that people can read and edit, kept in a desk folder outside the repository. Claude reads and edits these files directly.
 
 ```
-<데스크 폴더>/
-└─ <id>/                  태스크 하나
-    ├─ state.md             현황 (고쳐 씀, frontmatter: 제목 · 상태 · 상위 태스크 · 브랜치)
-    ├─ decisions.md         결정 (항목 추가)
-    ├─ log.md               로그 (덧붙이기만)
-    └─ files/               첨부파일
+<desk folder>/
+└─ <id>/                  one task
+    ├─ state.md             state (rewritten; frontmatter: title · status · parent task · branches)
+    ├─ decisions.md         decisions (entries added)
+    ├─ log.md               log (append only)
+    └─ files/               attachments
 ```
 
-## 설정
+Records are written in the language you talk to Claude in. Templates are provided in English and Korean; for other languages Claude translates the English ones.
 
-### 데스크 폴더
+## Configuration
 
-저장소 git 설정에 데스크 폴더 경로를 등록합니다. Claude에게 등록을 요청하면 대신 해줍니다. worktree도 같은 설정을 씁니다.
+### Desk folder
+
+Register the desk folder's path in the repository's git config. Ask Claude to register it and it will do it for you. Worktrees share the same setting.
 
 ```
 git config agent-desk.dir "~/XxxDrive/desk/myapp"
 ```
 
-클라우드 동기화 폴더에 두면 여러 PC에서 같은 기록을 쓸 수 있으므로 추천합니다. 다른 PC의 클론도 같은 폴더로 등록하면 됩니다.
-- 폴더의 파일이 항상 로컬에 내려받아져 있도록 설정하세요. 그렇지 않으면 파일을 읽을 때 지연되거나 실패할 수 있습니다.
-- 두 PC에서 같은 파일을 동시에 고쳐 충돌 사본이 생기면 세션 시작 시 Claude가 알림을 받습니다.
+A cloud-synced folder is recommended, since it lets several computers use the same records. Register the clones on other computers with the same folder.
+- Set the folder's files to always be kept on the device. Otherwise reading them can be slow or fail.
+- If the same file is edited on two computers at once and a conflict copy appears, Claude is told about it when a session starts.
 
-## 더 알아보기
+## Learn more
 
-- [`desk` 스킬](skills/desk/SKILL.md): Claude가 데스크를 다룰 때 따르는 구조와 규칙
-- [설계 원칙](docs/design-principles.md): 기능과 동작을 정할 때 지키는 원칙
+- [`desk` skill](skills/desk/SKILL.md): the structure and rules Claude follows when working with the desk
+- [Design principles](docs/design-principles.md) (Korean): the principles followed when deciding features and behavior
 
-## 라이선스
+## License
 
 [MIT](./LICENSE)

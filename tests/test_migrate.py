@@ -87,7 +87,7 @@ class Migrate(unittest.TestCase):
     def test_dry_run_changes_nothing(self):
         code, out = self.migrate("--dry-run")
         self.assertEqual(code, 0)
-        self.assertIn("이동 archive/261016-old → 261016-old", out["changed"])
+        self.assertIn("move archive/261016-old → 261016-old", out["changed"])
         self.assertTrue((self.root / "desk.toml").exists())
         self.assertTrue((self.project / "tasks" / "261016-auth").is_dir())
 
@@ -95,7 +95,7 @@ class Migrate(unittest.TestCase):
         (self.project / "trash" / "261016-gone").mkdir()
         code, out = self.migrate()
         self.assertEqual(code, 1)
-        self.assertIn("휴지통", out["error"])
+        self.assertIn("the trash", out["error"])
         self.assertTrue((self.project / "tasks" / "261016-auth").is_dir())
 
     def test_refuses_other_schema(self):

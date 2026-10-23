@@ -10,9 +10,9 @@ from pathlib import Path
 from .core import current_branch, desk_dir
 from .desk import Task, is_legacy, load_tasks, stray_files
 
-RULES_LINE = ("데스크를 사용하려면(태스크 읽기·기록·생성) 반드시 agent-desk:desk 스킬부터 읽는다.")
-MIGRATE_LINE = ("agent-desk 데이터가 이전 형식이다. 사용자에게 `adesk migrate` 실행을 제안할 것"
-                "(`--dry-run` 으로 바뀔 내용을 먼저 보여 줄 수 있음).")
+RULES_LINE = "Before using the desk (reading, recording or creating tasks), read the agent-desk:desk skill first."
+MIGRATE_LINE = ("The agent-desk data is in an older format. Suggest running `adesk migrate` to the user "
+                "(`--dry-run` shows the changes first).")
 
 
 def session_start_context(payload: dict) -> str | None:
@@ -22,10 +22,10 @@ def session_start_context(payload: dict) -> str | None:
         from .migrate import legacy_root
         return f"[agent-desk] {MIGRATE_LINE}" if legacy_root() else None
     branch = current_branch(cwd)
-    head = f"[agent-desk] 데스크 `{display_path(desk)}` · 브랜치 `{branch or '(없음)'}`"
+    head = f"[agent-desk] desk `{display_path(desk)}` · branch `{branch or '(none)'}`"
     if not desk.is_dir():
-        return (f"{head}\n경고: git config agent-desk.dir 가 가리키는 폴더가 없다. "
-                "사용자에게 알리고, 폴더를 옮겼으면 등록을 고칠 것.")
+        return (f"{head}\nWarning: the folder that git config agent-desk.dir points to does not exist. "
+                "Tell the user, and fix the registration if the folder was moved.")
     if is_legacy(desk):
         return f"{head}\n{MIGRATE_LINE}"
     tasks = load_tasks(desk)
@@ -45,9 +45,9 @@ def task_list(tasks: list[Task], branch: str | None) -> list[str]:
     """Open tasks, each child under its open parent."""
     open_tasks = [t for t in tasks if t.is_open and not t.error]
     if not open_tasks:
-        return ["열린 태스크 없음."]
+        return ["No open tasks."]
     open_ids = {t.id for t in open_tasks}
-    lines = ["--- 열린 태스크 ---"]
+    lines = ["--- open tasks ---"]
     for t in open_tasks:
         if t.parent in open_ids:
             continue
@@ -59,20 +59,20 @@ def task_list(tasks: list[Task], branch: str | None) -> list[str]:
 def task_line(task: Task, branch: str | None, nested: bool) -> str:
     parts = [f"{task.id} ({task.title})", task.status]
     if task.parent and not nested:
-        parts.append(f"상위 {task.parent}")
+        parts.append(f"parent {task.parent}")
     if branch and branch in task.branches:
-        parts.append("현재 브랜치에 연결됨")
+        parts.append("on the current branch")
     return ("  - " if nested else "- ") + " · ".join(parts)
 
 
 def warning_lines(tasks: list[Task]) -> list[str]:
-    lines = [f"경고: {t.id} 의 {t.error}. 목록에서 빠졌다. 사용자에게 알리고 고칠 것." for t in tasks if t.error]
+    lines = [f"Warning: {t.id}: {t.error}, so it is left out of the list. Tell the user and fix it." for t in tasks if t.error]
     for t in tasks:
         if t.is_open and not t.error:
             strays = stray_files(t)
             if strays:
-                lines.append(f"경고: {t.id} 폴더에 예상하지 않은 파일이 있다(동기화 충돌 사본일 수 있음): "
-                             f"{', '.join(strays)}. 사용자에게 알리고 병합 여부를 확인할 것.")
+                lines.append(f"Warning: unexpected files in the {t.id} folder (possibly sync conflict copies): "
+                             f"{', '.join(strays)}. Tell the user and ask whether to merge them.")
     return lines
 
 

@@ -57,7 +57,7 @@ class Parse(unittest.TestCase):
                 parse_frontmatter(fm(*lines))
 
     def test_error_names_the_file_line(self):
-        with self.assertRaisesRegex(DeskError, "3번째 줄"):
+        with self.assertRaisesRegex(DeskError, "line 3"):
             parse_frontmatter(fm("a: x", "  b: y"))
 
 
