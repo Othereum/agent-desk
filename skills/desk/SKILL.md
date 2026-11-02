@@ -16,7 +16,7 @@ A repository's desk folder is registered in `git config agent-desk.dir`. When th
 ```
 <desk folder>/
 └── <task-id>/
-    ├── state.md      # where things stand: enough to continue from on its own, 60 lines or fewer recommended
+    ├── state.md      # where things stand now: enough to continue from on its own, about 60 short lines
     ├── decisions.md  # decisions
     ├── log.md        # findings (causes, confirmed facts, dead ends), append only
     └── files/        # attachments (evidence)
@@ -36,7 +36,7 @@ A repository's desk folder is registered in `git config agent-desk.dir`. When th
 ## Rules
 
 - **Suggest, but the user decides.** When about to start new work with a clear goal that is likely to span sessions, first suggest recording it. Do not ask for a quick question, investigation or one-off fix. Which task a session works on is also set by the user's request; ask when it is unclear. Once set, read that task before starting.
-- **Keep it ready for the next session.** When a meaningful step is finished or the session is wrapping up, bring state.md up to date.
+- **Keep it ready for the next session.** When a meaningful step is finished or the session is wrapping up, rewrite state.md as a snapshot of now, not a history: take finished items out of Next and fold them into a line in where things stand, put findings in log.md and reasons in decisions.md, and leave commit details to git. Keep each item to a line or two.
 - **Record a decision as soon as it is settled.** Under `## Dn. Title  (YYYY-MM-DD, active)`, with the status words in the records' language as in the template: decision / reason / rejected alternatives / scope. The rejected alternatives and why are what keep the same discussion from repeating. Do not delete a changed decision: add a new entry, then change the old entry's heading status to `superseded → Dm` (`partly superseded → Dm` if only in part). Do not record matters of taste as decisions.
 - **Follow the parent task's active decisions.** If you need to depart from one, confirm with the user. Decisions and outcomes that span the whole line of work go in the parent task.
 - **Records are a starting point to verify.** When they disagree with the code, the code wins and the record gets fixed. Before proposing a change to an existing design or explaining its reasons, look through decisions.md, closed tasks included, for earlier decisions and rejected alternatives.
