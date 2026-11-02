@@ -1,4 +1,5 @@
 # Decisions
+<!-- Only choices about direction, structure or behavior whose rejected alternatives would otherwise come up again. Not implementation details, plans, bug fixes or small UI details -->
 
 <!--
 Entry format (add the newest entry at the bottom, numbered from D1 up):
