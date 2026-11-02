@@ -11,7 +11,7 @@ branches: []
 <!-- What things look like when the task is done -->
 
 ## Where things stand
-<!-- How far the work has come -->
+<!-- How far the work has come and what is being worked on now -->
 
 ## Next
 <!-- What is left. Finished items do not stay here -->
