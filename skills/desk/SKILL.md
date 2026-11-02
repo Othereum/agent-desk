@@ -16,7 +16,7 @@ A repository's desk folder is registered in `git config agent-desk.dir`. When th
 ```
 <desk folder>/
 └── <task-id>/
-    ├── state.md      # where things stand now: enough to continue from on its own, about 60 short lines
+    ├── state.md      # where things stand now, kept short so the next session can take it in quickly
     ├── decisions.md  # decisions
     ├── log.md        # findings (causes, confirmed facts, dead ends), append only
     └── files/        # attachments (evidence)
