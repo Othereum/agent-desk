@@ -25,6 +25,11 @@ main에 들어가는 것이 곧 릴리스다. 설치한 플러그인은 main의 
 - 설치한 사용자에게 영향을 주는 PR은 버전 올림을 포함하고, 병합 커밋에 `vX.Y.Z` 태그를 붙인다. README·CI처럼 영향이 없는 PR은 버전을 올리지 않는다.
 - semver: 데이터나 사용 방식이 깨지면 major, 기능 추가는 minor, 수정은 patch. 데이터 형식을 깨는 변경은 migrate와 함께 낸다.
 
+## 커밋
+- 커밋 제목은 명사형으로 끝낸다. "~한다"·"~함"으로 끝내지 않는다.
+  - 예: `결정 기준 강화, 사소한 선택은 결정에서 제외`
+- 버전을 올리는 커밋은 제목 앞에 `X.Y.Z: `를 붙인다.
+
 ## 테스트
 - hook·주입·CLI 코드를 바꾸면 `python -m unittest discover -s tests`로 테스트를 돌린다.
 - 스킬, `hooks/hooks.json`, `.claude-plugin/`의 manifest를 바꾸면 `claude plugin validate .`를 돌린다. 루트 CLAUDE.md 경고는 의도한 것이므로 무시하고, `--strict`는 쓰지 않는다.
