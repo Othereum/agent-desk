@@ -36,7 +36,11 @@ A repository's desk folder is registered in `git config agent-desk.dir`. When th
 ## Rules
 
 - **Suggest, but the user decides.** When about to start new work with a clear goal that is likely to span sessions, first suggest recording it. Do not ask for a quick question, investigation or one-off fix. Which task a session works on is also set by the user's request; ask when it is unclear. Once set, read that task before starting.
-- **Keep it ready for the next session.** When a meaningful step is finished or the session is wrapping up, rewrite state.md as a snapshot of now, not a history: take finished items out of Next and fold them into a line in where things stand, put findings in log.md and new decisions in decisions.md, and leave commit details to git. Keep each item to a line or two.
+- **Keep state.md a snapshot of now, not a history.** When a meaningful step is finished or the session is wrapping up, rewrite each section for the present instead of appending to it. Keep each item to a line or two.
+  - Where things stand says where the work is and what is in progress now. Finished work collapses into at most one summary line; individual finished items, commits and fixes disappear, since git and log.md keep them.
+  - Before saving, test every line: if it were gone, would the next session act differently? If not, delete it. Lines listing what was committed or also done, how something was fixed, or which function changed are history.
+  - Route what is not state: findings and how a bug was fixed go in log.md, and how to build or run things is not desk material. An option the user rejected or had reverted goes in decisions.md only if it passes the decision test below; otherwise drop it.
+  - Open questions holds only questions waiting on the user; leave it empty when there are none.
 - **Record a decision as soon as it is settled, but only a real decision; most choices are not.** A decision is a choice between alternatives about direction, structure or behavior that a later session could reasonably reopen or undo. Test: without this entry, would the next session likely propose a rejected alternative again, and would that cost more than a small edit or a quick question? If not, it is not a decision. A user picking one of the options you offered does not by itself make it a decision. These are not decisions:
   - why a bug happened and how it was fixed: log.md
   - implementation details the code already shows (names, signatures, how a value is passed)
