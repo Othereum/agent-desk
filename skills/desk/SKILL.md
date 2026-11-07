@@ -33,14 +33,35 @@ A repository's desk folder is registered in `git config agent-desk.dir`. When th
   - `parent`: the parent task ID (one level only)
   - `branches`: `[a, b]`, the branches where this task's work is done
 
-## Rules
+## Creating tasks
 
-- **Suggest, but the user decides.** When about to start new work with a clear goal that is likely to span sessions, first suggest recording it. Do not ask for a quick question, investigation or one-off fix. Which task a session works on is also set by the user's request; ask when it is unclear. Once set, read that task before starting.
+- **Create a task only on the user's explicit instruction or approval.**
+- **Suggest recording work that deserves a task, before starting it.** Do not ask for a quick question, investigation or one-off fix.
+- **What deserves a task.** A task holds context that would otherwise be lost between sessions. It deserves one when at least one of these holds:
+  - The work can't finish in one session: its stages, measurements or prototypes decide what comes next.
+  - It waits on something outside the session (an upstream PR, a release, another person) and has to be picked up later.
+  - Findings, dead ends or rejected alternatives are building up that a later session would otherwise have to rediscover.
+
+  These are not tasks: work one session can finish, even if it is put off to the next session; a plan that fits in a short note; a to-do list.
+- What is not context for a task (facts that stay true after the task ends, ways of working) does not belong in the desk.
+
+## Working on a task
+
+- **Read a task before working on it.**
+- **Records are a starting point to verify.** When they disagree with the code, the code wins and the record gets fixed. Before proposing a change to an existing design or explaining its reasons, look through decisions.md, closed tasks included, for earlier decisions and rejected alternatives.
+- **Repository output never points at the desk.** Do not put task IDs, decision numbers or desk paths in code, docs, commit messages or PRs; spell out the reasons instead. The desk is data only this user sees.
+- **Delete records only when the user asks** (task folders, decisions, attachments).
+
+## state.md
+
 - **Keep state.md a snapshot of now, not a history.** When a meaningful step is finished or the session is wrapping up, rewrite each section for the present instead of appending to it. Keep each item to a line or two.
   - Where things stand says where the work is and what is in progress now. Finished work collapses into at most one summary line; individual finished items, commits and fixes disappear, since git and log.md keep them.
   - Before saving, test every line: if it were gone, would the next session act differently? If not, delete it. Lines listing what was committed or also done, how something was fixed, or which function changed are history.
   - Route what is not state: findings and how a bug was fixed go in log.md, and how to build or run things is not desk material. An option the user rejected or had reverted goes in decisions.md only if it passes the decision test below; otherwise drop it.
   - Open questions holds only questions waiting on the user; leave it empty when there are none.
+
+## Decisions
+
 - **Record a decision as soon as it is settled, but only a real decision; most choices are not.** A decision is a choice between alternatives about direction, structure or behavior that a later session could reasonably reopen or undo. Test: without this entry, would the next session likely propose a rejected alternative again, and would that cost more than a small edit or a quick question? If not, it is not a decision. A user picking one of the options you offered does not by itself make it a decision. These are not decisions:
   - why a bug happened and how it was fixed: log.md
   - implementation details the code already shows (names, signatures, how a value is passed)
@@ -51,7 +72,3 @@ A repository's desk folder is registered in `git config agent-desk.dir`. When th
   When unsure, leave it out; record it if the same question comes up again.
 - **Keep decision entries short.** Under `## Dn. Title  (YYYY-MM-DD, active)`, with the status words in the records' language as in the template: decision / reason / rejected alternatives / scope. One decision per entry, a few lines in design terms. The rejected alternatives and why are what keep the same discussion from repeating; list only those likely to come up again. Scope names the affected parts, not steps or a full file list; causes and investigation stay in log.md. A choice that refines or details an active decision without reversing it goes into that entry: if you are about to write "refines Dn", edit Dn instead. Do not delete a changed decision: add a new entry, then change the old entry's heading status to `superseded → Dm` (`partly superseded → Dm` if only in part).
 - **Follow the parent task's active decisions.** If you need to depart from one, confirm with the user. Decisions and outcomes that span the whole line of work go in the parent task.
-- **Records are a starting point to verify.** When they disagree with the code, the code wins and the record gets fixed. Before proposing a change to an existing design or explaining its reasons, look through decisions.md, closed tasks included, for earlier decisions and rejected alternatives.
-- **Repository output never points at the desk.** Do not put task IDs, decision numbers or desk paths in code, docs, commit messages or PRs; spell out the reasons instead. The desk is data only this user sees.
-- **Delete records only when the user asks** (task folders, decisions, attachments).
-- What is not context for a task (facts that stay true after the task ends, ways of working) does not belong in the desk.
