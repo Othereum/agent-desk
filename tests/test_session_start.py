@@ -74,6 +74,16 @@ class SessionStart(unittest.TestCase):
         self.assertEqual(len(unlinked), 1)
         self.assertNotEqual(linked, unlinked)
 
+    def test_default_branch_is_not_marked_current(self):
+        write_task(self.desk, "261016-shared", "공용", branches="[main, feature/login]")
+        git(self.env, self.repo, "-c", "user.name=t", "-c", "user.email=t@example.com",
+            "commit", "-q", "--allow-empty", "-m", "init")
+        git(self.env, self.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+        git(self.env, self.repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+        self.assertIn("on the current branch", self.lines_with(self.context(), "- ", "261016-shared")[0])
+        git(self.env, self.repo, "checkout", "-q", "-b", "main")
+        self.assertNotIn("on the current branch", self.lines_with(self.context(), "- ", "261016-shared")[0])
+
     def test_unreadable_and_stray_files_warn(self):
         bad = write_task(self.desk, "261016-bad")
         (bad / "state.md").write_text("---\ntitle: [a\n---\n", encoding="utf-8")

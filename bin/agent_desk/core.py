@@ -57,3 +57,9 @@ def desk_dir(cwd: Path) -> Path | None:
 
 def current_branch(cwd: Path) -> str | None:
     return git(cwd, "symbolic-ref", "--short", "-q", "HEAD") or None
+
+
+def default_branch(cwd: Path) -> str | None:
+    """The remote's default branch (origin/HEAD), None when the repository has no such ref."""
+    ref = git(cwd, "symbolic-ref", "--short", "-q", "refs/remotes/origin/HEAD")
+    return ref.removeprefix("origin/") if ref else None

@@ -31,7 +31,7 @@ A repository's desk folder is registered in `git config agent-desk.dir`. When th
     - open tasks: `todo`, `in_progress`, `on_hold`
     - closed tasks: `done`, `cancelled`
   - `parent`: the parent task ID (one level only)
-  - `branches`: `[a, b]`, the branches where this task's work is done
+  - `branches`: `[a, b]`, the branches where this task's work is done; list only branches dedicated to this task, never shared ones such as the default branch
 
 ## Creating tasks
 

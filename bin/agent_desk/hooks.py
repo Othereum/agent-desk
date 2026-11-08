@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-from .core import current_branch, desk_dir
+from .core import current_branch, default_branch, desk_dir
 from .desk import Task, is_legacy, load_tasks, stray_files
 
 RULES_LINE = "Before using the desk (reading, recording or creating tasks), read the agent-desk:desk skill first."
@@ -29,7 +29,9 @@ def session_start_context(payload: dict) -> str | None:
     if is_legacy(desk):
         return f"{head}\n{MIGRATE_LINE}"
     tasks = load_tasks(desk)
-    lines = [head] + task_list(tasks, branch) + warning_lines(tasks)
+    # The default branch is shared by every task, so matching it says nothing about which task is current.
+    match = None if branch == default_branch(cwd) else branch
+    lines = [head] + task_list(tasks, match) + warning_lines(tasks)
     return "\n".join(lines + ["", RULES_LINE])
 
 
