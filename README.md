@@ -89,6 +89,17 @@ Claude  Wrote the final outcome (email login, refresh 5 minutes before expiry)
         into the state and marked the task done.
 ```
 
+### Looking through tasks yourself
+
+You can see the task list and the records in the browser, along with the desks of other repositories kept next to this one. Changes to the records show up right away, and the viewer stops by itself once you close the page.
+
+```
+You     Open the desk.
+Claude  Opened the desk viewer in the browser.
+```
+
+You can also open it yourself with `! adesk view` at the Claude Code prompt.
+
 ## Core concepts
 
 The record space agent-desk manages is called the **desk**.

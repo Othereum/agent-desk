@@ -1,6 +1,6 @@
 ---
 name: desk
-description: Reads tasks from the desk, records progress in them, and creates new ones. Use when continuing or starting work, when a direction is settled or a step is finished, and when asked about or explaining the reasons behind an existing design or the alternatives it rejected. Do not use when there is no desk information.
+description: Reads tasks from the desk, records progress in them, and creates new ones. Use when continuing or starting work, when a direction is settled or a step is finished, when asked about or explaining the reasons behind an existing design or the alternatives it rejected, and when the user wants to look through the tasks. Do not use when there is no desk information.
 ---
 
 # agent-desk
@@ -10,6 +10,10 @@ The **desk** is where context (where things stand, decisions, findings) is kept 
 ## Registering a repository
 
 A repository's desk folder is registered in `git config agent-desk.dir`. When the user asks to register, create the folder where the user wants it and register it. If the user does not name a location, lightly suggest a cloud-synced folder. Example: `~/XxxDrive/desk/myapp`
+
+## Showing the desk to the user
+
+When the user wants to look through the tasks themselves, run `adesk view`. It opens a live, read-only page in the browser with every desk in the folder that holds this repository's desk, and returns at once.
 
 ## Structure
 

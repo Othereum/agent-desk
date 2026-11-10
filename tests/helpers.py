@@ -28,9 +28,9 @@ def child_env(base: Path) -> dict:
     return env
 
 
-def run(env: dict, *args: str, stdin: str = "") -> subprocess.CompletedProcess:
+def run(env: dict, *args: str, stdin: str = "", cwd: Path | None = None) -> subprocess.CompletedProcess:
     return subprocess.run([sys.executable, str(DESK_PY), *args], input=stdin, capture_output=True,
-                          text=True, encoding="utf-8", env=env)
+                          text=True, encoding="utf-8", env=env, cwd=cwd)
 
 
 def git(env: dict, cwd: Path, *args: str) -> str:

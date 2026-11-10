@@ -1,12 +1,12 @@
-"""agent-desk: a SessionStart hook that lists the repository's open tasks, and `migrate` for
-data of the format before 0.13.
+"""agent-desk: a SessionStart hook that lists the repository's open tasks, `view` (a read-only
+page in the browser for the user) and `migrate` for data of the format before 0.13.
 
 The desk itself is plain markdown that the agent reads and edits with its own file tools
 (skills/desk/SKILL.md); nothing here writes it except migrate.
 Requires Python 3.11+. Standard library only.
 
 Modules, each importing only from those before it:
-core (io, git) → frontmatter → desk (task folders) → hooks, migrate.
+core (io, git) → frontmatter → desk (task folders) → hooks, view, migrate.
 """
 
 import json
@@ -14,7 +14,7 @@ import sys
 
 REMOVED_COMMAND = ("The adesk recording commands (focus, new, put, append, log, status, close, ...) were removed in 0.13. "
                    "Edit the desk files directly (agent-desk:desk skill). "
-                   "Remaining command: adesk migrate [--dry-run] [--root DIR]")
+                   "Remaining commands: adesk view [FOLDER], adesk migrate [--dry-run] [--root DIR]")
 
 
 def hook_failure(event: str, error: BaseException) -> None:
@@ -42,6 +42,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0  # an event an older hooks.json still sends (e.g. while the plugin updates)
     if argv[:1] == ["migrate"]:
         from .migrate import run
+        return run(argv[1:])
+    if argv[:1] == ["view"]:
+        from .view import run
         return run(argv[1:])
     print(REMOVED_COMMAND, file=sys.stderr)
     return 2
