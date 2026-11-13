@@ -342,6 +342,9 @@ main { overflow-y: auto; min-width: 0; }
 .md a { color: var(--accent); }
 .md hr { border: 0; border-top: 1px solid var(--line); }
 .files a { display: block; padding: 3px 0; color: var(--accent); }
+.dochead { display: flex; gap: 12px; align-items: center; margin: 12px 0; font-size: 13px; }
+.dochead .back { border: 0; background: transparent; padding: 0; cursor: pointer; color: var(--accent); font: inherit; }
+.dochead a { color: var(--muted); margin-left: auto; }
 @media (max-width: 760px) {
   .app { grid-template-columns: 1fr; grid-template-rows: 45vh 1fr; }
   aside { border-right: 0; border-bottom: 1px solid var(--line); }
@@ -373,6 +376,8 @@ const store = {
 };
 let data = null, desk = null, filter = store.get("filter", "open"), query = "";
 let sel = null, tab = "state.md", taskData = null, desksText = "", taskText = "", offline = false, busy = false;
+// doc: the Markdown attachment shown in the Files tab; docText: null while loading, false if it is gone
+let doc = null, docText = null, inDoc = false;
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -404,6 +409,12 @@ async function tick() {
       const tt = rt.ok ? await rt.text() : "";
       if (tt !== taskText) { taskText = tt; taskData = tt ? JSON.parse(tt) : null; renderTask(); }
     }
+    if (sel && doc) {
+      const name = doc;
+      const rd = await fetch(fileUrl(name), { cache: "no-store" });
+      const dt = rd.ok ? await rd.text() : false;
+      if (name === doc && dt !== docText) { docText = dt; renderTask(); }
+    }
     setOffline(false);
   } catch (e) {
     setOffline(true);
@@ -420,9 +431,27 @@ function setOffline(v) {
 
 // ---------------------------------------------------------------- selection
 
+// #<desk>/<task id>, or #<desk>/<task id>/files/<name> while an attachment is open
+function parseHash(h) {
+  const m = decodeURIComponent(h).match(/^([^/]+)\/([^/]+)(?:\/files\/(.+))?$/);
+  return m && { desk: m[1], id: m[2], doc: m[3] || null };
+}
+
+function taskHash() {
+  return "#" + enc(sel.desk) + "/" + enc(sel.id) + (doc ? "/files/" + enc(doc) : "");
+}
+
+const docHash = (name) => "#" + enc(sel.desk) + "/" + enc(sel.id) + "/files/" + enc(name);
+const isMd = (name) => /\.(md|markdown)$/i.test(name);
+
 function pickInitial() {
-  const m = decodeURIComponent(location.hash.slice(1)).match(/^([^/]+)\/(.+)$/);
-  if (m && findTask(m[1], m[2])) { desk = m[1]; sel = { desk: m[1], id: m[2] }; return; }
+  const h = parseHash(location.hash.slice(1));
+  if (h && findTask(h.desk, h.id)) {
+    desk = h.desk;
+    sel = { desk: h.desk, id: h.id };
+    if (h.doc) { tab = "files"; doc = h.doc; }
+    return;
+  }
   showDesk(data.desks.length ? data.desks[0].name : null, true);
 }
 
@@ -439,15 +468,23 @@ function showDesk(name, replace) {
   renderTask();
 }
 
-function select(deskName, id, replace) {
-  if (sel && sel.desk === deskName && sel.id === id) return;
+// The tab is kept in the history entry being left, so that Back returns to the tab a link was followed from.
+function navigate(replace) {
+  if (replace) history.replaceState(null, "", taskHash());
+  else history.pushState(null, "", taskHash());
+}
+
+function select(deskName, id, replace, name = null) {
+  if (sel && sel.desk === deskName && sel.id === id) { if (name) openDoc(name, replace); return; }
+  if (sel && !replace) history.replaceState({ tab }, "");
   desk = deskName;
   sel = { desk: deskName, id };
-  tab = "state.md";
+  tab = name ? "files" : "state.md";
+  doc = name;
+  docText = null;
   taskData = null;
   taskText = "";
-  const hash = "#" + enc(desk) + "/" + enc(id);
-  if (replace) history.replaceState(null, "", hash); else history.pushState(null, "", hash);
+  navigate(replace);
   renderDesks();
   renderList();
   renderTask();
@@ -455,9 +492,39 @@ function select(deskName, id, replace) {
   tick();
 }
 
-window.addEventListener("popstate", () => {
-  const m = decodeURIComponent(location.hash.slice(1)).match(/^([^/]+)\/(.+)$/);
-  if (m) { sel = null; select(m[1], m[2], true); }
+function openDoc(name, replace) {
+  if (!replace) history.replaceState({ tab }, "");
+  tab = "files";
+  doc = name;
+  docText = null;
+  navigate(replace);
+  renderTask();
+  $("#main").scrollTop = 0;
+  tick();
+}
+
+function closeDoc() {
+  history.replaceState({ tab }, "");
+  doc = null;
+  docText = null;
+  history.pushState({ tab: "files" }, "", taskHash());
+  renderTask();
+}
+
+window.addEventListener("popstate", (e) => {
+  const h = parseHash(location.hash.slice(1));
+  if (!h) return;
+  if (sel && sel.desk === h.desk && sel.id === h.id) {
+    doc = h.doc;
+    docText = null;
+    tab = doc ? "files" : "state.md";
+  } else {
+    sel = null;
+    select(h.desk, h.id, true, h.doc);
+  }
+  if (!h.doc && e.state && e.state.tab) tab = e.state.tab;
+  renderTask();
+  tick();
 });
 
 // ---------------------------------------------------------------- list
@@ -555,7 +622,8 @@ function renderTask() {
     return `<button data-tab="${f}" class="${tab === f ? "on" : ""}"${missing ? " disabled" : ""}>${label}</button>`;
   }).join("") + (att.length ? `<button data-tab="files" class="${tab === "files" ? "on" : ""}">Files (${att.length})</button>` : "");
   if (!taskData) body += '<div class="placeholder">Loading…</div>';
-  else if (tab === "files") body += '<div class="files">' + att.map((n) => `<a href="${fileUrl(n)}" target="_blank" rel="noopener">${esc(n)}</a>`).join("") + "</div>";
+  else if (tab === "files" && doc) body += docView();
+  else if (tab === "files") body += '<div class="files">' + att.map((n) => attachmentLink(n, esc(n))).join("") + "</div>";
   else if (taskData.files[tab] === null) body += `<div class="placeholder">No ${esc(tab)}.</div>`;
   else body += `<div class="md">${md(taskData.files[tab])}</div>`;
 
@@ -566,6 +634,20 @@ function renderTask() {
 
 function fileUrl(name) {
   return `file?desk=${enc(sel.desk)}&id=${enc(sel.id)}&name=${enc(name)}`;
+}
+
+// Markdown attachments open inside the viewer; anything else opens raw in a new tab.
+function attachmentLink(name, text) {
+  return isMd(name) ? `<a href="${docHash(name)}">${text}</a>` : `<a href="${fileUrl(name)}" target="_blank" rel="noopener">${text}</a>`;
+}
+
+function docView() {
+  const head = `<div class="dochead"><button class="back">← Files</button><code>${esc(doc)}</code>`
+    + `<a href="${fileUrl(doc)}" target="_blank" rel="noopener">Open raw</a></div>`;
+  if (docText === null) return head + '<div class="placeholder">Loading…</div>';
+  if (docText === false) return head + `<div class="placeholder">No files/${esc(doc)}.</div>`;
+  inDoc = true;
+  try { return head + `<div class="md">${md(docText)}</div>`; } finally { inDoc = false; }
 }
 
 async function copy(button) {
@@ -587,12 +669,19 @@ $("#main").addEventListener("click", (e) => {
   const c = e.target.closest("button.copy");
   if (c) { copy(c); return; }
   const b = e.target.closest(".tabs button");
-  if (b && !b.disabled) { tab = b.dataset.tab; renderTask(); $("#main").scrollTop = 0; return; }
+  if (b && !b.disabled) {
+    tab = b.dataset.tab;
+    if (doc) { doc = null; docText = null; history.replaceState(null, "", taskHash()); }
+    renderTask();
+    $("#main").scrollTop = 0;
+    return;
+  }
+  if (e.target.closest("button.back")) { closeDoc(); return; }
   const a = e.target.closest('a[href^="#"]');
   if (a) {
     e.preventDefault();
-    const m = decodeURIComponent(a.getAttribute("href").slice(1)).match(/^([^/]+)\/(.+)$/);
-    if (m) select(m[1], m[2]);
+    const h = parseHash(a.getAttribute("href").slice(1));
+    if (h) select(h.desk, h.id, false, h.doc);
   }
 });
 
@@ -691,8 +780,12 @@ function inline(s) {
 function link(url, text) {
   const raw = url.replace(/&amp;/g, "&");
   if (/^(https?:|mailto:)/i.test(raw)) return `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}</a>`;
-  if (sel && raw.startsWith("files/")) return `<a href="${fileUrl(raw.slice(6))}" target="_blank" rel="noopener">${text}</a>`;
-  return text;
+  const rel = raw.replace(/^\.\//, "");
+  // Inside an attachment, a bare relative name points at a sibling in files/.
+  let name = rel.startsWith("files/") ? rel.slice(6) : inDoc && /^[^:#/?]+$/.test(rel) ? rel : null;
+  if (!sel || !name) return text;
+  try { name = decodeURIComponent(name); } catch (e) {}
+  return attachmentLink(name, text);
 }
 
 // Task IDs of the same desk written in the records become links, outside tags and existing links.
