@@ -16,8 +16,8 @@ main에 들어가는 것이 곧 릴리스다. 설치한 플러그인은 main의 
 
 지금은 1.0 이전이다.
 - origin/main에 푸시하면 바로 릴리스된다. 푸시는 내보낼 만한 단위가 모였을 때 한 번에 한다.
-- 설치한 사용자에게 영향을 주는 변경(bin/, hooks/, skills/, templates/ 등)을 origin/main에 넣을 때는 `version` 올림을 포함한다.
-- 버전: breaking change는 minor를, 기능 추가·수정은 patch를 올린다.
+- 버전은 커밋마다 올리지 않고 푸시할 때 한 번 올린다. 푸시에 설치한 사용자에게 영향을 주는 변경(bin/, hooks/, skills/, templates/ 등)이 있으면 푸시 직전 마지막 커밋에 `version` 올림을 넣는다.
+- 버전: 푸시에 담긴 변경 중 가장 큰 것을 기준으로, breaking change가 있으면 minor를, 기능 추가·수정뿐이면 patch를 올린다.
 - 중간 상태를 원격에 올려야 하는 작업은 브랜치에서 하고, 동작하는 상태가 되면 main에 병합한다.
 - 데이터 형식이 바뀌면 이전 형식을 알아보고 변환하는 `adesk migrate`를 함께 고친다.
 
