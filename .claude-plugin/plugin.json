@@ -1,6 +1,6 @@
 {
   "name": "agent-desk",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "description": "A personal task desk where a coding agent records and reads each task's state, decisions and findings",
   "author": { "name": "Othereum" },
   "license": "MIT"
