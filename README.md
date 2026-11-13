@@ -109,7 +109,7 @@ The record space agent-desk manages is called the **desk**.
 | desk | agent-desk's record space (one desk folder per repository) |
 | task record | the state, decisions and log of one task |
 | state / decisions / log | state.md / decisions.md / log.md |
-| attachments | files attached to a task (files/) |
+| attachments | files attached to a task, detailed plans and designs (files/) |
 | task status | open (todo, in progress, on hold), closed (done, cancelled) |
 
 ### Tasks

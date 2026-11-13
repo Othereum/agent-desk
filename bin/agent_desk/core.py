@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 TASK_FILES = ("state.md", "decisions.md", "log.md")
-FILES_DIR = "files"  # a task's attachments: evidence kept as given, the conclusions go in the task files
+FILES_DIR = "files"  # a task's attachments: evidence kept as given, and documents too long for state.md (plans, designs)
 OPEN_STATUSES = ("todo", "in_progress", "on_hold")
 CLOSED_STATUSES = ("done", "cancelled")
 DIR_KEY = "agent-desk.dir"  # git config key: the repository's desk folder

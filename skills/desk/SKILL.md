@@ -23,7 +23,7 @@ When the user wants to look through the tasks themselves, run `adesk view`. It o
     ├── state.md      # where things stand now, kept short so the next session can take it in quickly
     ├── decisions.md  # decisions
     ├── log.md        # findings (causes, confirmed facts, dead ends), append only
-    └── files/        # attachments (evidence)
+    └── files/        # attachments: evidence, and documents too long for state.md (detailed plans, designs)
 ```
 
 - A task ID is `<yymmdd>-<slug>`.
@@ -61,7 +61,9 @@ When the user wants to look through the tasks themselves, run `adesk view`. It o
 
 - **Keep state.md a snapshot of now, not a history.** When a meaningful step is finished or the session is wrapping up, rewrite each section for the present instead of appending to it. Keep each item to a line or two.
   - Where things stand says where the work is and what is in progress now. Finished work collapses into at most one summary line; individual finished items, commits and fixes disappear, since git and log.md keep them.
-  - Before saving, test every line: if it were gone, would the next session act differently? If not, delete it. Lines listing what was committed or also done, how something was fixed, or which function changed are history.
+  - Stages holds the whole plan of a task that runs in stages, one line per stage. Mark finished stages done instead of deleting them, since they show the plan's shape, and mark the current one. Next holds only what to do now in the current stage. When the user and you work out a plan, record it here right away, before it exists only in the conversation. A stage that itself spans several sessions is better as a child task.
+  - A detailed plan or design too long for state.md goes in a Markdown file under files/, linked from Stages. It says what to build; why, and the rejected alternatives, stay only in decisions.md.
+  - Before saving, test every line outside Stages: if it were gone, would the next session act differently? If not, delete it. Lines listing what was committed or also done, how something was fixed, or which function changed are history.
   - Route what is not state: findings and how a bug was fixed go in log.md, and how to build or run things is not desk material. An option the user rejected or had reverted goes in decisions.md only if it passes the decision test below; otherwise drop it.
   - Open questions holds only questions waiting on the user; leave it empty when there are none.
 
@@ -70,7 +72,7 @@ When the user wants to look through the tasks themselves, run `adesk view`. It o
 - **Record a decision as soon as it is settled, but only a real decision; most choices are not.** A decision is a choice between alternatives about direction, structure or behavior that a later session could reasonably reopen or undo. Test: without this entry, would the next session likely propose a rejected alternative again, and would that cost more than a small edit or a quick question? If not, it is not a decision. A user picking one of the options you offered does not by itself make it a decision. These are not decisions:
   - why a bug happened and how it was fixed: log.md
   - implementation details the code already shows (names, signatures, how a value is passed)
-  - work order, phases and plans: state.md
+  - work order, stages and plans: Stages in state.md, details in a plan file under files/
   - small UI or behavior details that a few lines can change and whose reason is obvious (layout, sizes, labels, defaults, shortcuts)
   - not building something nobody argued for, and matters of taste
 
