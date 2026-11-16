@@ -47,6 +47,8 @@ When the user wants to look through the tasks themselves, run `adesk view`. It o
   - Findings, dead ends or rejected alternatives are building up that a later session would otherwise have to rediscover.
 
   These are not tasks: work one session can finish, even if it is put off to the next session; a plan that fits in a short note; a to-do list.
+- **Carry the conversation into a new task.** A task is usually created right after the discussion that led to it, and the next session gets only what is written down. When creating one, move what the discussion produced into its files: the goal and why the work is needed into Goal, any plan into Stages, directions already settled into decisions.md (if they pass the decision test), and findings and dead ends into log.md. A task holding only a title and a one-line goal makes the next session redo that discussion.
+- Set `status` to `in_progress` if work starts now, otherwise `todo`. If the work belongs under an open task, ask the user whether to make it a child and set `parent`.
 - What is not context for a task (facts that stay true after the task ends, ways of working) does not belong in the desk.
 
 ## Working on a task

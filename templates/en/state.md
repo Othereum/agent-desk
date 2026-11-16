@@ -8,7 +8,7 @@ branches: []
 <!-- Decisions live in decisions.md, findings in log.md, and the change history in git -->
 
 ## Goal
-<!-- What things look like when the task is done -->
+<!-- What things look like when the task is done, and why the work is needed -->
 
 ## Stages
 <!-- The whole plan of a task that runs in stages, one line per stage, with finished stages and the current one marked. A detailed plan or design goes in files/, linked from here. Leave empty for a task without stages -->
