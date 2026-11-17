@@ -13,7 +13,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bin"))
 
 from agent_desk.core import DeskError
-from agent_desk.view import desk_names, make_handler, resolve_root, start_server
+from agent_desk.view import code_fingerprint, desk_names, make_handler, resolve_root, start_server
 from http.server import ThreadingHTTPServer
 from helpers import child_env, git, init_repo, run, write_task
 
@@ -71,7 +71,6 @@ class Server(unittest.TestCase):
         (self.task / "files" / "trace.txt").write_text("evidence", encoding="utf-8")
         (self.root / "secret.txt").write_text("no", encoding="utf-8")
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.root, "myapp", "tok"))
-        self.server.last_request = 0
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.base = f"http://127.0.0.1:{self.server.server_port}"
 
@@ -116,23 +115,39 @@ class Server(unittest.TestCase):
         self.assertEqual(self.get("/tok/api/task?desk=myapp&id=..")[0], 404)
         self.assertEqual(self.get("/tok/file?desk=myapp&id=261016-login&name=../state.md")[0], 404)
 
-    def test_requests_keep_the_server_alive(self):
-        self.get("/tok/api/desks")
-        self.assertGreater(self.server.last_request, 0)
+    def test_ping_reports_the_code_fingerprint(self):
+        self.assertEqual(self.get("/tok/api/ping"), (200, code_fingerprint().encode("ascii")))
 
 
 class Start(unittest.TestCase):
-    def test_detached_server_reports_its_address(self):
+    def test_detached_server_is_reused_and_restarts_at_the_same_address(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp).resolve()
+            root = Path(tmp).resolve() / "desk"
             write_task(root / "myapp", "261016-login", "로그인")
-            url, proc = start_server(root, "myapp")
-            try:
-                with urllib.request.urlopen(url + "api/desks") as r:
-                    self.assertEqual(json.loads(r.read())["desks"][0]["name"], "myapp")
-            finally:
-                proc.kill()
-                proc.wait()
+            procs = []
+            with mock.patch("agent_desk.view.STATE_DIR", Path(tmp) / "state"):
+                try:
+                    url, proc = start_server(root, "myapp")
+                    procs.append(proc)
+                    with urllib.request.urlopen(url + "api/desks") as r:
+                        self.assertEqual(json.loads(r.read())["desks"][0]["name"], "myapp")
+                    self.assertEqual(start_server(root, "myapp"), (url, None))
+                    proc.kill()
+                    proc.wait()
+                    again, proc = start_server(root, "myapp")
+                    procs.append(proc)
+                    self.assertIsNotNone(proc)
+                    self.assertEqual(again, url)
+                    with mock.patch("agent_desk.view.code_fingerprint", return_value="other code"):
+                        replaced, new = start_server(root, "myapp")
+                    procs.append(new)
+                    self.assertIsNotNone(new)
+                    self.assertEqual(replaced, url)
+                    self.assertEqual(proc.wait(5), 0)
+                finally:
+                    for p in procs:
+                        p.kill()
+                        p.wait()
 
 
 if __name__ == "__main__":

@@ -91,7 +91,7 @@ Claude  Wrote the final outcome (email login, refresh 5 minutes before expiry)
 
 ### Looking through tasks yourself
 
-You can see the task list and the records in the browser, along with the desks of other repositories kept next to this one. Changes to the records show up right away, and the viewer stops by itself once you close the page.
+You can see the task list and the records in the browser, along with the desks of other repositories kept next to this one. Changes to the records show up right away. The viewer keeps running in the background even while you look at other tabs, and opening it again reuses it.
 
 ```
 You     Open the desk.

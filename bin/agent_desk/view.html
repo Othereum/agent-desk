@@ -329,7 +329,7 @@ $("#filter").addEventListener("click", (e) => {
 
 function renderTask() {
   const main = $("#main");
-  const banner = offline ? '<div class="banner">The viewer has stopped. Run <code>adesk view</code> again, or ask Claude to open the desk.</div>' : "";
+  const banner = offline ? '<div class="banner">The viewer has stopped. Run <code>adesk view</code> again, or ask Claude to open the desk; this page reconnects by itself.</div>' : "";
   if (!sel) {
     main.innerHTML = banner + `<div class="placeholder">${data ? "Select a task." : "Loading…"}</div>`;
     return;
