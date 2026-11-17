@@ -90,4 +90,5 @@ When the user wants to look through the tasks themselves, run `adesk view`. It o
   - where the work landed when git cannot tell: commits or PRs on a shared branch, other repositories
 
   Do not copy what git already has: status changes, "committed", "tests passed", a diff retold in words.
-- **Add entries at the bottom under a date heading; do not rewrite earlier ones.** When an entry turns out wrong, leave it and add a dated correction that names it.
+- **Add entries at the bottom under a date heading.**
+- **Keep every entry true on its own; fix a wrong entry in place instead of adding a correction.** A reader should be able to trust any single entry without reading on to find it was overturned. Also fix entries that drew conclusions from it. If the wrong reading is a trap a later session could fall into again, keep it as one line in the fixed entry ("looked like X at first, but Y").

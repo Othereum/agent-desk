@@ -138,7 +138,7 @@ The desk's records are all Markdown files that people can read and edit, kept in
 └─ <id>/                  one task
     ├─ state.md             state (rewritten; frontmatter: title · status · parent task · branches)
     ├─ decisions.md         decisions (entries added)
-    ├─ log.md               log (append only)
+    ├─ log.md               log (entries added; wrong ones fixed)
     └─ files/               attachments
 ```
 

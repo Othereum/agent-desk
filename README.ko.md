@@ -138,7 +138,7 @@ fix/crash       ───▶       261016-crash-on-save/
 └─ <id>/                  태스크 하나
     ├─ state.md             현황 (고쳐 씀, frontmatter: 제목 · 상태 · 상위 태스크 · 브랜치)
     ├─ decisions.md         결정 (항목 추가)
-    ├─ log.md               로그 (덧붙이기만)
+    ├─ log.md               로그 (항목 추가, 틀린 항목은 고침)
     └─ files/               첨부파일
 ```
 
