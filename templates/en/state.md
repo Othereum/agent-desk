@@ -5,7 +5,7 @@ parent:
 branches: []
 ---
 <!-- This task as it stands now. Keep it short, concise and current so the next session can take it in quickly. When updating, rewrite sections instead of appending -->
-<!-- Decisions live in decisions.md, findings in log.md, and the change history in git -->
+<!-- Decisions live in decisions.md, findings and work outside the repository in log.md, and the change history in git -->
 
 ## Goal
 <!-- What things look like when the task is done, and why the work is needed -->

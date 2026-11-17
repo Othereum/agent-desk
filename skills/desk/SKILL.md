@@ -22,7 +22,7 @@ When the user wants to look through the tasks themselves, run `adesk view`. It o
 └── <task-id>/
     ├── state.md      # where things stand now, kept short so the next session can take it in quickly
     ├── decisions.md  # decisions
-    ├── log.md        # findings (causes, confirmed facts, dead ends), append only
+    ├── log.md        # what happened that nothing else keeps: findings, work outside the repository
     └── files/        # attachments: evidence, and documents too long for state.md (detailed plans, designs)
 ```
 
@@ -66,13 +66,13 @@ When the user wants to look through the tasks themselves, run `adesk view`. It o
   - Stages holds the whole plan of a task that runs in stages, one line per stage. Mark finished stages done instead of deleting them, since they show the plan's shape, and mark the current one. Next holds only what to do now in the current stage. When the user and you work out a plan, record it here right away, before it exists only in the conversation. A stage that itself spans several sessions is better as a child task.
   - A detailed plan or design too long for state.md goes in a Markdown file under files/, linked from Stages. It says what to build; why, and the rejected alternatives, stay only in decisions.md.
   - Before saving, test every line outside Stages: if it were gone, would the next session act differently? If not, delete it. Lines listing what was committed or also done, how something was fixed, or which function changed are history.
-  - Route what is not state: findings and how a bug was fixed go in log.md, and how to build or run things is not desk material. An option the user rejected or had reverted goes in decisions.md only if it passes the decision test below; otherwise drop it.
+  - Route what is not state: findings and work done outside the repository go in log.md, and how to build or run things is not desk material. An option the user rejected or had reverted goes in decisions.md only if it passes the decision test below; otherwise drop it.
   - Open questions holds only questions waiting on the user; leave it empty when there are none.
 
-## Decisions
+## decisions.md
 
 - **Record a decision as soon as it is settled, but only a real decision; most choices are not.** A decision is a choice between alternatives about direction, structure or behavior that a later session could reasonably reopen or undo. Test: without this entry, would the next session likely propose a rejected alternative again, and would that cost more than a small edit or a quick question? If not, it is not a decision. A user picking one of the options you offered does not by itself make it a decision. These are not decisions:
-  - why a bug happened and how it was fixed: log.md
+  - why a bug happened: log.md (how it was fixed is in the code)
   - implementation details the code already shows (names, signatures, how a value is passed)
   - work order, stages and plans: Stages in state.md, details in a plan file under files/
   - small UI or behavior details that a few lines can change and whose reason is obvious (layout, sizes, labels, defaults, shortcuts)
@@ -81,3 +81,13 @@ When the user wants to look through the tasks themselves, run `adesk view`. It o
   When unsure, leave it out; record it if the same question comes up again.
 - **Keep decision entries short.** Under `## Dn. Title  (YYYY-MM-DD, active)`, with the status words in the records' language as in the template: decision / reason / rejected alternatives / scope. One decision per entry, a few lines in design terms. The rejected alternatives and why are what keep the same discussion from repeating; list only those likely to come up again. Scope names the affected parts, not steps or a full file list; causes and investigation stay in log.md. A choice that refines or details an active decision without reversing it goes into that entry: if you are about to write "refines Dn", edit Dn instead. Do not delete a changed decision: add a new entry, then change the old entry's heading status to `superseded → Dm` (`partly superseded → Dm` if only in part).
 - **Follow the parent task's active decisions.** If you need to depart from one, confirm with the user. Decisions and outcomes that span the whole line of work go in the parent task.
+
+## log.md
+
+- **Record only what no other record keeps.** log.md holds what happened that code, git and the other desk files do not, and that the next session would otherwise have to rediscover or re-check at a cost:
+  - findings: causes, confirmed facts, dead ends and why they failed
+  - work done outside the repository and its results (data migrations, server or config changes, measurements, issues filed upstream)
+  - where the work landed when git cannot tell: commits or PRs on a shared branch, other repositories
+
+  Do not copy what git already has: status changes, "committed", "tests passed", a diff retold in words.
+- **Add entries at the bottom under a date heading; do not rewrite earlier ones.** When an entry turns out wrong, leave it and add a dated correction that names it.

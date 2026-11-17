@@ -114,7 +114,7 @@ The record space agent-desk manages is called the **desk**.
 
 ### Tasks
 
-A task is a piece of work with one goal, like "implement login" or "fix the save bug", and all of agent-desk's records are kept per task. Each task keeps three things: **where things stand** (state), **what was decided and why** (decisions), and **what was found** (log).
+A task is a piece of work with one goal, like "implement login" or "fix the save bug", and all of agent-desk's records are kept per task. Each task keeps three things: **where things stand** (state), **what was decided and why** (decisions), and **what was found or done outside the code** (log).
 
 When a session starts, Claude receives the list of open tasks. You decide what to work on; Claude reads that task's record, starts, and records into it. If you link a task to a branch, the list shows it, so asking to do this branch's work starts with that task.
 
