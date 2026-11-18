@@ -6,7 +6,10 @@
 
 진행상황, 결정, 발견을 태스크 단위로 기록해 맥락을 보존하고, 새 세션에서 그 일을 이어가면 Claude가 기록을 읽고 시작합니다. "어디까지 했고 왜 이렇게 했는지" 다시 설명하지 않아도 됩니다.
 
-![태스크 상태를 보여 주는 데스크 뷰어](docs/images/viewer.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/viewer-dark.png">
+  <img alt="태스크 상태를 보여 주는 데스크 뷰어" src="docs/images/viewer-light.png">
+</picture>
 
 ## 설치
 
