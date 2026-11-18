@@ -6,6 +6,8 @@ English | [한국어](README.ko.md)
 
 It keeps context by recording progress, decisions and findings per task, and when you continue that work in a new session, Claude reads the record before it starts. You do not have to explain again "how far we got and why we did it this way."
 
+![The desk viewer showing a task's state](docs/images/viewer.png)
+
 ## Installation
 
 > Requires Python 3.11 or later and git.
