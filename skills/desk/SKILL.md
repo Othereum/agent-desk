@@ -55,6 +55,7 @@ When the user wants to look through the tasks themselves, run `adesk view`. It o
 
 - **Read a task before working on it.**
 - **Keep `status` in step with the work.** When you start working on a `todo` or `on_hold` task, set it to `in_progress` before anything else. When the work stops to wait or ends, change it then: `on_hold`, or `done`/`cancelled` once the user agrees it is over.
+- **A question or an open discussion is not a settlement.** Record when the user agrees to a direction or the discussion moves on, once for the whole thread, not after every answer. This applies wherever these rules say to record something as soon as it is settled or right away.
 - **Records are a starting point to verify.** When they disagree with the code, the code wins and the record gets fixed. Before proposing a change to an existing design or explaining its reasons, look through decisions.md, closed tasks included, for earlier decisions and rejected alternatives.
 - **Repository output never points at the desk.** Do not put task IDs, decision numbers or desk paths in code, docs, commit messages or PRs; spell out the reasons instead. The desk is data only this user sees.
 - **Delete records only when the user asks** (task folders, decisions, attachments).
