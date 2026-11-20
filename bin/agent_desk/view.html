@@ -270,7 +270,7 @@ function visible(t) {
   return !query || (t.id + " " + t.title).toLowerCase().includes(query);
 }
 
-const RANK = { in_progress: 0, todo: 1, on_hold: 2, done: 4, cancelled: 5 };
+const RANK = { in_progress: 0, todo: 1, on_hold: 2, done: 4, cancelled: 4 };
 const rank = (t) => (t.error ? 3 : RANK[t.status] ?? 3);
 function order(a, b) {
   return (rank(a) - rank(b)) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
