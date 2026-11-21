@@ -20,6 +20,8 @@ claude plugin marketplace add Othereum/agent-desk
 claude plugin install agent-desk@agent-desk
 ```
 
+Claude Code does not auto-update plugins from third-party marketplaces unless you turn it on. To get new versions, run `/plugin` in a session, open the **Marketplaces** tab, select agent-desk and turn on auto-update. You can also ask Claude: "Turn on auto-update for the agent-desk marketplace."
+
 ## Usage
 
 ### A repository you use for the first time

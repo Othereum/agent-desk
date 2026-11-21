@@ -20,6 +20,8 @@ claude plugin marketplace add Othereum/agent-desk
 claude plugin install agent-desk@agent-desk
 ```
 
+Claude Code는 서드파티 마켓플레이스의 플러그인을 따로 켜지 않으면 자동으로 업데이트하지 않습니다. 새 버전을 받으려면 세션에서 `/plugin`을 실행하고 **Marketplaces** 탭에서 agent-desk를 골라 자동 업데이트를 켜세요. Claude에게 "agent-desk 마켓플레이스 자동 업데이트 켜 줘"라고 해도 됩니다.
+
 ## 사용 방법
 
 ### 처음 쓰는 저장소
