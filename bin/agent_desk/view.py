@@ -51,6 +51,11 @@ def run(argv: list[str]) -> int:
     parser.add_argument("folder", nargs="?", metavar="FOLDER",
                         help="a desk folder, or a folder holding desk folders")
     parser.add_argument("--no-open", action="store_true", help="print the address without opening a browser")
+    parser.add_argument("--shortcut", choices=["menu", "desktop", "both"],
+                        help="instead of opening, add an entry that opens these desks without Claude Code to the "
+                             "start menu (app launcher), the desktop or both; one per folder of desks, run again "
+                             "to replace it")
+    parser.add_argument("--name", help="the entry's name with --shortcut (default: from the folder and its parent)")
     parser.add_argument("--serve", action="store_true", help=argparse.SUPPRESS)  # the detached server itself
     parser.add_argument("--current", help=argparse.SUPPRESS)
     parser.add_argument("--state", help=argparse.SUPPRESS)
@@ -60,8 +65,14 @@ def run(argv: list[str]) -> int:
         return serve(Path(args.folder), args.current, Path(args.state) if args.state else None, args.replace)
     try:
         root, current = resolve_root(args.folder, Path.cwd())
+        if args.shortcut:
+            from .shortcut import create
+            places = ["menu", "desktop"] if args.shortcut == "both" else [args.shortcut]
+            created = "\n".join(f"Created {p}" for p in create(root, args.name, places))
+            print(f"{created}\nIt opens the desks in {root} without Claude Code.")
+            return 0
         url = start_server(root, current)[0]
-    except DeskError as e:
+    except (DeskError, OSError, ValueError) as e:
         print(f"adesk view: {e}", file=sys.stderr)
         return 1
     if not args.no_open:

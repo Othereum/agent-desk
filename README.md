@@ -105,6 +105,13 @@ Claude  Opened the desk viewer in the browser.
 
 You can also open it yourself with `! adesk view` at the Claude Code prompt.
 
+To open it without Claude Code, add a shortcut to the start menu (app launcher), the desktop or both. If your desks are split across several folders, such as personal and work, add one for each folder.
+
+```
+You     Put a viewer shortcut on the desktop.
+Claude  Added "Agent Desk (OneDrive · desk)" to the desktop.
+```
+
 ## Core concepts
 
 The record space agent-desk manages is called the **desk**.

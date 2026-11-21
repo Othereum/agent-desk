@@ -13,7 +13,7 @@ A repository's desk folder is registered in `git config agent-desk.dir`. When th
 
 ## Showing the desk to the user
 
-When the user wants to look through the tasks themselves, run `adesk view`. It opens a live, read-only page in the browser with every desk in the folder that holds this repository's desk, and returns at once.
+When the user wants to look through the tasks themselves, run `adesk view`. It opens a live, read-only page in the browser with every desk in the folder that holds this repository's desk, and returns at once. To open it without Claude Code, `adesk view --shortcut menu|desktop|both [FOLDER] [--name NAME]` adds an entry to the start menu (app launcher), the desktop or both, one per folder of desks; ask which the user wants if they did not say. To remove one, delete it: `Agent Desk (...).lnk` on Windows, `Agent Desk (...).app` on macOS, `agent-desk-*.desktop` elsewhere, in the start menu Programs folder (`~/Applications`, `~/.local/share/applications`) or on the desktop.
 
 ## Structure
 

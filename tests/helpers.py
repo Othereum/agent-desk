@@ -16,7 +16,8 @@ DESK_PY = REPO / "bin" / "desk.py"
 
 
 def child_env(base: Path) -> dict:
-    env = {k: v for k, v in os.environ.items() if not k.upper().startswith(("AGENT_DESK_", "CLAUDE", "GIT_"))}
+    env = {k: v for k, v in os.environ.items()
+           if not k.upper().startswith(("AGENT_DESK_", "CLAUDE", "GIT_", "XDG_DATA_HOME"))}
     gitconfig = base / "gitconfig"
     gitconfig.write_text("", encoding="utf-8")
     env.update({

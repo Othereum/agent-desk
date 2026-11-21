@@ -6,7 +6,7 @@ The desk itself is plain markdown that the agent reads and edits with its own fi
 Requires Python 3.11+. Standard library only.
 
 Modules, each importing only from those before it:
-core (io, git) → frontmatter → desk (task folders) → hooks, view, migrate.
+core (io, git) → frontmatter → desk (task folders) → view, shortcut, migrate → hooks.
 """
 
 import json

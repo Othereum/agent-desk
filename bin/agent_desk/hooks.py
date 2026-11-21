@@ -81,6 +81,11 @@ def warning_lines(tasks: list[Task]) -> list[str]:
 def cmd_hook(event: str) -> None:
     from . import hook_failure
     try:
+        from .shortcut import refresh_launcher
+        refresh_launcher()
+    except Exception:
+        pass  # only a viewer shortcut made before a plugin update is affected, and the next session retries
+    try:
         payload = json.loads(sys.stdin.read() or "{}")
         context = session_start_context(payload)
     except Exception as e:  # a hook must never break the session, but must not fail silently
