@@ -187,12 +187,16 @@ function pickInitial() {
     if (h.doc) { tab = "files"; doc = h.doc; }
     return;
   }
-  showDesk(data.desks.length ? data.desks[0].name : null, true);
+  // Opened without a repository (a desktop shortcut), the desk last looked at comes back first.
+  const last = store.get("desk", null);
+  const start = data.current || (findDesk(last) ? last : data.desks.length ? data.desks[0].name : null);
+  showDesk(start, true);
 }
 
 // Switch to a desk and show its latest task in progress (or open task), if any.
 function showDesk(name, replace) {
   desk = name;
+  if (name) store.set("desk", name);
   const d = findDesk(name);
   const t = d && (d.tasks.filter((t) => t.status === "in_progress").pop() || d.tasks.filter((t) => t.open).pop());
   if (t) { select(name, t.id, replace); return; }
@@ -213,6 +217,7 @@ function select(deskName, id, replace, name = null) {
   if (sel && sel.desk === deskName && sel.id === id) { if (name) openDoc(name, replace); return; }
   if (sel && !replace) history.replaceState({ tab }, "");
   desk = deskName;
+  store.set("desk", deskName);
   sel = { desk: deskName, id };
   tab = name ? "files" : "state.md";
   doc = name;
