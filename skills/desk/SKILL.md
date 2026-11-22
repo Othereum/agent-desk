@@ -53,7 +53,7 @@ When the user wants to look through the tasks themselves, run `adesk view`. It o
 
 ## Working on a task
 
-- **Read a task before working on it.**
+- **Read a task before working on it, with the Read tool, not a shell command.** Edit and Write refuse a file that was not read with Read, and desk files usually get edited later. Read several files in parallel.
 - **Keep `status` in step with the work.** When you start working on a `todo` or `on_hold` task, set it to `in_progress` before anything else. When the work stops to wait or ends, change it then: `on_hold`, or `done`/`cancelled` once the user agrees it is over.
 - **A question or an open discussion is not a settlement.** Record when the user agrees to a direction or the discussion moves on, once for the whole thread, not after every answer. This applies wherever these rules say to record something as soon as it is settled or right away.
 - **Records are a starting point to verify.** When they disagree with the code, the code wins and the record gets fixed. Before proposing a change to an existing design or explaining its reasons, look through decisions.md, closed tasks included, for earlier decisions and rejected alternatives.
