@@ -54,7 +54,7 @@ When the user wants to look through the tasks themselves, run `adesk view`. It o
 ## Working on a task
 
 - **Read a task before working on it, with the Read tool, not a shell command.** Edit and Write refuse a file that was not read with Read, and desk files usually get edited later. Read several files in parallel.
-- **Keep `status` in step with the work.** When you start working on a `todo` or `on_hold` task, set it to `in_progress` before anything else. When the work stops to wait or ends, change it then: `on_hold`, or `done`/`cancelled` once the user agrees it is over.
+- **Keep `status` in step with the work.** When you start working on a `todo` or `on_hold` task, set it to `in_progress` before anything else. When the work stops to wait or ends, change it then: `on_hold`, or `done`/`cancelled` once the user agrees it is over. At that point, check that log.md holds nothing another area still needs (see log.md below).
 - **A question or an open discussion is not a settlement.** Record when the user agrees to a direction or the discussion moves on, once for the whole thread, not after every answer. This applies wherever these rules say to record something as soon as it is settled or right away.
 - **Records are a starting point to verify.** When they disagree with the code, the code wins and the record gets fixed. Before proposing a change to an existing design or explaining its reasons, look through decisions.md, closed tasks included, for earlier decisions and rejected alternatives.
 - **Repository output never points at the desk.** Do not put task IDs, decision numbers or desk paths in code, docs, commit messages or PRs; spell out the reasons instead. The desk is data only this user sees.
@@ -91,5 +91,6 @@ When the user wants to look through the tasks themselves, run `adesk view`. It o
   - where the work landed when git cannot tell: commits or PRs on a shared branch, other repositories
 
   Do not copy what git already has: status changes, "committed", "tests passed", a diff retold in words.
+- **A finding or to-do that concerns another area does not stay only in log.md.** log.md is read only by whoever continues this task, so a session that later touches that area will never see it. Tell the user right away and suggest a home: a task (a new one or an open one for that area) if it is work to do, or a place outside the desk if it is a fact that outlives this task.
 - **Add entries at the bottom under a date heading.**
 - **Keep every entry true on its own; fix a wrong entry in place instead of adding a correction.** A reader should be able to trust any single entry without reading on to find it was overturned. Also fix entries that drew conclusions from it. If the wrong reading is a trap a later session could fall into again, keep it as one line in the fixed entry ("looked like X at first, but Y").
