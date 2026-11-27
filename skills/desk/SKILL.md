@@ -68,6 +68,7 @@ When the user wants to look through the tasks themselves, run `adesk view`. It o
   - A detailed plan or design too long for state.md goes in a Markdown file under files/, linked from Stages. It says what to build; why, and the rejected alternatives, stay only in decisions.md.
   - Before saving, test every line outside Stages: if it were gone, would the next session act differently? If not, delete it. Lines listing what was committed or also done, how something was fixed, or which function changed are history.
   - Route what is not state: findings and work done outside the repository go in log.md, and how to build or run things is not desk material. An option the user rejected or had reverted goes in decisions.md only if it passes the decision test below; otherwise drop it.
+  - What git shows right now (uncommitted changes, unpushed commits, the current branch) is not desk material; the next session checks git. Note it only when git on another machine cannot see it, such as commits that exist only on this machine.
   - Open questions holds only questions waiting on the user; leave it empty when there are none.
 
 ## decisions.md
@@ -88,9 +89,9 @@ When the user wants to look through the tasks themselves, run `adesk view`. It o
 - **Record only what no other record keeps.** log.md holds what happened that code, git and the other desk files do not, and that the next session would otherwise have to rediscover or re-check at a cost:
   - findings: causes, confirmed facts, dead ends and why they failed
   - work done outside the repository and its results (data migrations, server or config changes, measurements, issues filed upstream)
-  - where the work landed when git cannot tell: commits or PRs on a shared branch, other repositories
+  - where the work landed when git cannot tell: commits that exist only on another machine, commits or PRs on a shared branch, other repositories
 
-  Do not copy what git already has: status changes, "committed", "tests passed", a diff retold in words.
+  Do not copy what git already has: status changes, "committed", "pushed / not pushed yet", "tests passed", a diff retold in words.
 - **A finding or to-do that concerns another area does not stay only in log.md.** log.md is read only by whoever continues this task, so a session that later touches that area will never see it. Tell the user right away and suggest a home: a task (a new one or an open one for that area) if it is work to do, or a place outside the desk if it is a fact that outlives this task.
 - **Add entries at the bottom under a date heading.**
 - **Keep every entry true on its own; fix a wrong entry in place instead of adding a correction.** A reader should be able to trust any single entry without reading on to find it was overturned. Also fix entries that drew conclusions from it. If the wrong reading is a trap a later session could fall into again, keep it as one line in the fixed entry ("looked like X at first, but Y").
